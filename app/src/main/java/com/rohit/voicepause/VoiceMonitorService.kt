@@ -18,18 +18,19 @@ class VoiceMonitorService : Service() {
     @Volatile private var micRunning = false
 
     // ===== VOICE LOGIC =====
-    @Volatile private var voiceThreshold = 200          // VERY sensitive
-    @Volatile private var silenceTimeoutMs = 10_000L    // 5 seconds
+    @Volatile private var voiceThreshold = 200        // RMS threshold
+    @Volatile private var silenceTimeoutMs = 10_000L  // ms
+
     private var lastVoiceTime = 0L
+    private var silenceTimerStarted = false
+
     private var hasAudioFocus = false
     private var pausedByVoice = false
 
-    private var silenceStartTime: Long = 0L
-
-
     // ===== MUSIC IDLE =====
     private var lastMusicActiveTime = 0L
-    private val AUTO_STOP_TIMEOUT_MS = 60_000L // 1 min
+    private var musicEverPlayed = false
+    private val AUTO_STOP_TIMEOUT_MS = 60_000L
 
     // ===== POLLING =====
     private lateinit var workerThread: HandlerThread
@@ -57,16 +58,24 @@ class VoiceMonitorService : Service() {
         workerThread = HandlerThread("VoicePauseWorker")
         workerThread.start()
         handler = Handler(workerThread.looper)
-
-        startForeground(NOTIFICATION_ID, createNotification())
-        handler.post(musicChecker)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+
+        Log.d("VoicePause", "Service started")
+
+        startForeground(NOTIFICATION_ID, createNotification())
+
+        lastMusicActiveTime = System.currentTimeMillis()
+
         if (intent?.action == ACTION_STOP_SERVICE) {
-            stopServiceCompletely()
+            stopServiceCompletely("Manual stop")
             return START_NOT_STICKY
         }
+
+        handler.removeCallbacks(musicChecker)
+        handler.post(musicChecker)
+
         return START_STICKY
     }
 
@@ -79,31 +88,35 @@ class VoiceMonitorService : Service() {
     private val musicChecker = object : Runnable {
         override fun run() {
 
-            // 🔄 Apply sliders instantly
             voiceThreshold = Settings.getVoiceThreshold(applicationContext)
             silenceTimeoutMs = Settings.getSilenceDuration(applicationContext)
 
-            if (audioManager.isMusicActive) {
-                lastMusicActiveTime = System.currentTimeMillis()
+            val now = System.currentTimeMillis()
+            val musicPlaying = audioManager.isMusicActive
+
+            if (musicPlaying) {
+                musicEverPlayed = true
+                lastMusicActiveTime = now
                 startMicIfNeeded()
             } else {
                 stopMicIfNeeded()
-                checkAutoStop()
+
+                // 🚫 Do NOT auto-stop while paused by voice
+                if (musicEverPlayed && !pausedByVoice) {
+                    val idle = now - lastMusicActiveTime
+                    if (idle >= AUTO_STOP_TIMEOUT_MS) {
+                        stopServiceCompletely("Auto-stop: music idle")
+                        return
+                    }
+                }
             }
 
             handler.postDelayed(this, 1000)
         }
     }
 
-    private fun checkAutoStop() {
-        if (System.currentTimeMillis() - lastMusicActiveTime > AUTO_STOP_TIMEOUT_MS) {
-            Log.d("VoicePause", "Auto-stop after idle")
-            stopServiceCompletely()
-        }
-    }
-
     // ======================
-    // MIC HANDLING (SAFE)
+    // MIC HANDLING
     // ======================
 
     private fun startMicIfNeeded() {
@@ -111,7 +124,7 @@ class VoiceMonitorService : Service() {
 
         micRunning = true
         pausedByVoice = false
-        lastVoiceTime = 0L
+        silenceTimerStarted = false
 
         val sampleRate = 16000
         val bufferSize = AudioRecord.getMinBufferSize(
@@ -138,16 +151,15 @@ class VoiceMonitorService : Service() {
                 if (read > 0) {
                     val rms = calculateRms(buffer, read)
 
-                    // 🔊 VOICE DETECTION
                     if (rms > voiceThreshold) {
                         onVoiceDetected()
+                    } else {
+                        checkForSilence()
                     }
-
-                    checkForSilence()
                 }
             }
 
-            cleanupMic()
+            releaseMic()
         }
 
         micThread?.start()
@@ -156,10 +168,16 @@ class VoiceMonitorService : Service() {
 
     private fun stopMicIfNeeded() {
         if (!micRunning) return
+
         micRunning = false
+        try {
+            micThread?.join(300)
+        } catch (_: Exception) {}
+
+        micThread = null
     }
 
-    private fun cleanupMic() {
+    private fun releaseMic() {
         try { audioRecord?.stop() } catch (_: Exception) {}
         try { audioRecord?.release() } catch (_: Exception) {}
         audioRecord = null
@@ -173,19 +191,15 @@ class VoiceMonitorService : Service() {
     }
 
     // ======================
-    // PAUSE / RESUME
+    // PAUSE / RESUME LOGIC
     // ======================
 
     private fun onVoiceDetected() {
-        val now = System.currentTimeMillis()
+        lastVoiceTime = System.currentTimeMillis()
+        silenceTimerStarted = false
 
-        // 🔴 If music already paused, RESET silence window
-        if (pausedByVoice) {
-            silenceStartTime = 0L
-            return
-        }
+        if (pausedByVoice) return
 
-        // First voice that triggers pause
         val result = audioManager.requestAudioFocus(
             null,
             AudioManager.STREAM_MUSIC,
@@ -195,50 +209,44 @@ class VoiceMonitorService : Service() {
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             pausedByVoice = true
             hasAudioFocus = true
-            silenceStartTime = 0L   // silence window not started yet
             Log.d("VoicePause", "Music paused by voice")
         }
     }
-
 
     private fun checkForSilence() {
         if (!pausedByVoice) return
 
         val now = System.currentTimeMillis()
 
-        // Start silence timer only once
-        if (silenceStartTime == 0L) {
-            silenceStartTime = now
+        if (!silenceTimerStarted) {
+            silenceTimerStarted = true
+            lastVoiceTime = now
             return
         }
 
-        val silenceDuration = now - silenceStartTime
+        val silence = now - lastVoiceTime
 
-        if (silenceDuration >= silenceTimeoutMs) {
+        if (silence >= silenceTimeoutMs) {
             audioManager.abandonAudioFocus(null)
             hasAudioFocus = false
             pausedByVoice = false
-            silenceStartTime = 0L
+            silenceTimerStarted = false
 
-            Log.d(
-                "VoicePause",
-                "Music resumed after ${silenceDuration}ms of silence"
-            )
+            Log.d("VoicePause", "Music resumed after silence")
         }
     }
-
 
     // ======================
     // STOP EVERYTHING
     // ======================
 
-    private fun stopServiceCompletely() {
-        Log.d("VoicePause", "Stopping service")
+    private fun stopServiceCompletely(reason: String) {
+        Log.d("VoicePause", "Stopping service → $reason")
 
         micRunning = false
         handler.removeCallbacksAndMessages(null)
-        stopForeground(true)
 
+        stopForeground(true)
         sendBroadcast(Intent(ACTION_SERVICE_STOPPED))
         stopSelf()
     }
