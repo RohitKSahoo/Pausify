@@ -28,13 +28,14 @@ fun HomeScreen(
     var isRunning by remember { mutableStateOf(false) }
     var showStoppedSnackbar by remember { mutableStateOf(false) }
 
-    // 🎛 Slider state (persisted)
-    var voiceThreshold by remember {
-        mutableStateOf(Settings.getVoiceThreshold(context).toFloat())
+    // 🎙 Voice sensitivity (1–100)
+    var voiceSensitivity by remember {
+        mutableStateOf(Settings.getVoiceSensitivity(context))
     }
 
-    var silenceDuration by remember {
-        mutableStateOf(Settings.getSilenceDuration(context).toFloat())
+    // ⏱ Silence duration (seconds: 1–20)
+    var silenceSeconds by remember {
+        mutableStateOf(Settings.getSilenceSeconds(context))
     }
 
     // 🔔 Listen for service stop broadcast
@@ -51,11 +52,7 @@ fun HomeScreen(
         val filter = IntentFilter(VoiceMonitorService.ACTION_SERVICE_STOPPED)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(
-                receiver,
-                filter,
-                Context.RECEIVER_NOT_EXPORTED
-            )
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             context.registerReceiver(receiver, filter)
         }
@@ -93,7 +90,7 @@ fun HomeScreen(
 
             StatusCard(isRunning = isRunning)
 
-            // 🎙️ Voice Sensitivity
+            // 🎙 Voice Sensitivity
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -101,30 +98,27 @@ fun HomeScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Voice Sensitivity",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Text("Voice Sensitivity", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Slider(
-                        value = voiceThreshold,
+                        value = voiceSensitivity.toFloat(),
                         onValueChange = {
-                            voiceThreshold = it
-                            Settings.setVoiceThreshold(context, it.toInt())
+                            voiceSensitivity = it.toInt()
+                            Settings.setVoiceSensitivity(context, voiceSensitivity)
                         },
-                        valueRange = 1000f..6000f,
-                        steps = 10
+                        valueRange = 1f..100f,
+                        steps = 98
                     )
 
                     Text(
-                        text = "Threshold: ${voiceThreshold.toInt()}",
+                        text = "Sensitivity: $voiceSensitivity",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
 
-            // ⏱️ Silence Duration
+            // ⏱ Silence Duration
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -132,24 +126,21 @@ fun HomeScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Silence Duration",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Text("Silence Duration", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Slider(
-                        value = silenceDuration,
+                        value = silenceSeconds.toFloat(),
                         onValueChange = {
-                            silenceDuration = it
-                            Settings.setSilenceDuration(context, it.toLong())
+                            silenceSeconds = it.toInt()
+                            Settings.setSilenceSeconds(context, silenceSeconds)
                         },
-                        valueRange = 500f..5000f,
-                        steps = 9
+                        valueRange = 1f..20f,
+                        steps = 18
                     )
 
                     Text(
-                        text = "Resume after ${(silenceDuration / 1000).toInt()}s silence",
+                        text = "Resume after ${silenceSeconds}s of silence",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

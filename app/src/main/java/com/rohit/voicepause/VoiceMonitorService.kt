@@ -12,40 +12,40 @@ class VoiceMonitorService : Service() {
 
     private lateinit var audioManager: AudioManager
 
-    // ===== Mic =====
+    // ===== MIC THREAD =====
     @Volatile private var audioRecord: AudioRecord? = null
     @Volatile private var micThread: Thread? = null
     @Volatile private var micRunning = false
 
-    // ===== Voice logic =====
-    @Volatile private var voiceThreshold = 1200
-    @Volatile private var silenceTimeoutMs = 10_000L
+    // ===== VOICE LOGIC =====
+    @Volatile private var voiceThreshold = 200          // VERY sensitive
+    @Volatile private var silenceTimeoutMs = 10_000L    // 5 seconds
     private var lastVoiceTime = 0L
+    private var hasAudioFocus = false
     private var pausedByVoice = false
 
-    // ===== Noise adaptation =====
-    private var noiseFloor = 0.0
-    private val NOISE_SMOOTHING = 0.95
-    private val MIN_ABSOLUTE_RMS = 250.0
+    private var silenceStartTime: Long = 0L
 
-    // ===== Music inactivity =====
+
+    // ===== MUSIC IDLE =====
     private var lastMusicActiveTime = 0L
-    private val AUTO_STOP_TIMEOUT_MS = 60_000L
+    private val AUTO_STOP_TIMEOUT_MS = 60_000L // 1 min
 
-    // ===== Polling =====
+    // ===== POLLING =====
     private lateinit var workerThread: HandlerThread
     private lateinit var handler: Handler
 
     companion object {
         const val ACTION_SERVICE_STOPPED =
             "com.rohit.voicepause.ACTION_SERVICE_STOPPED"
+
         private const val NOTIFICATION_ID = 100
         private const val ACTION_STOP_SERVICE =
             "com.rohit.voicepause.ACTION_STOP_SERVICE"
     }
 
     // ======================
-    // Lifecycle
+    // LIFECYCLE
     // ======================
 
     override fun onCreate() {
@@ -54,13 +54,12 @@ class VoiceMonitorService : Service() {
 
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
 
-        startForeground(NOTIFICATION_ID, createNotification())
-
         workerThread = HandlerThread("VoicePauseWorker")
         workerThread.start()
         handler = Handler(workerThread.looper)
 
-        handler.post(musicStateChecker)
+        startForeground(NOTIFICATION_ID, createNotification())
+        handler.post(musicChecker)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -74,12 +73,13 @@ class VoiceMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     // ======================
-    // Music polling (RESTORED)
+    // MUSIC CHECK LOOP
     // ======================
 
-    private val musicStateChecker = object : Runnable {
+    private val musicChecker = object : Runnable {
         override fun run() {
 
+            // 🔄 Apply sliders instantly
             voiceThreshold = Settings.getVoiceThreshold(applicationContext)
             silenceTimeoutMs = Settings.getSilenceDuration(applicationContext)
 
@@ -97,20 +97,21 @@ class VoiceMonitorService : Service() {
 
     private fun checkAutoStop() {
         if (System.currentTimeMillis() - lastMusicActiveTime > AUTO_STOP_TIMEOUT_MS) {
+            Log.d("VoicePause", "Auto-stop after idle")
             stopServiceCompletely()
         }
     }
 
     // ======================
-    // Mic handling
+    // MIC HANDLING (SAFE)
     // ======================
 
     private fun startMicIfNeeded() {
         if (micRunning) return
 
         micRunning = true
-        noiseFloor = 0.0
         pausedByVoice = false
+        lastVoiceTime = 0L
 
         val sampleRate = 16000
         val bufferSize = AudioRecord.getMinBufferSize(
@@ -136,23 +137,17 @@ class VoiceMonitorService : Service() {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: break
                 if (read > 0) {
                     val rms = calculateRms(buffer, read)
-                    updateNoiseFloor(rms)
 
-                    val threshold = maxOf(
-                        noiseFloor * 1.6,
-                        MIN_ABSOLUTE_RMS,
-                        voiceThreshold.toDouble()
-                    )
-
-                    if (rms > threshold && !pausedByVoice) {
-                        pauseMusic()
+                    // 🔊 VOICE DETECTION
+                    if (rms > voiceThreshold) {
+                        onVoiceDetected()
                     }
 
                     checkForSilence()
                 }
             }
 
-            releaseMic()
+            cleanupMic()
         }
 
         micThread?.start()
@@ -164,18 +159,33 @@ class VoiceMonitorService : Service() {
         micRunning = false
     }
 
-    private fun releaseMic() {
+    private fun cleanupMic() {
         try { audioRecord?.stop() } catch (_: Exception) {}
         try { audioRecord?.release() } catch (_: Exception) {}
         audioRecord = null
+
+        if (hasAudioFocus) {
+            audioManager.abandonAudioFocus(null)
+            hasAudioFocus = false
+        }
+
         Log.d("VoicePause", "Mic released")
     }
 
     // ======================
-    // Pause / Resume (FIXED)
+    // PAUSE / RESUME
     // ======================
 
-    private fun pauseMusic() {
+    private fun onVoiceDetected() {
+        val now = System.currentTimeMillis()
+
+        // 🔴 If music already paused, RESET silence window
+        if (pausedByVoice) {
+            silenceStartTime = 0L
+            return
+        }
+
+        // First voice that triggers pause
         val result = audioManager.requestAudioFocus(
             null,
             AudioManager.STREAM_MUSIC,
@@ -184,30 +194,65 @@ class VoiceMonitorService : Service() {
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             pausedByVoice = true
-            lastVoiceTime = System.currentTimeMillis()
+            hasAudioFocus = true
+            silenceStartTime = 0L   // silence window not started yet
             Log.d("VoicePause", "Music paused by voice")
         }
     }
 
+
     private fun checkForSilence() {
         if (!pausedByVoice) return
 
-        if (System.currentTimeMillis() - lastVoiceTime > silenceTimeoutMs) {
+        val now = System.currentTimeMillis()
+
+        // Start silence timer only once
+        if (silenceStartTime == 0L) {
+            silenceStartTime = now
+            return
+        }
+
+        val silenceDuration = now - silenceStartTime
+
+        if (silenceDuration >= silenceTimeoutMs) {
             audioManager.abandonAudioFocus(null)
+            hasAudioFocus = false
             pausedByVoice = false
-            Log.d("VoicePause", "Music resumed after silence")
+            silenceStartTime = 0L
+
+            Log.d(
+                "VoicePause",
+                "Music resumed after ${silenceDuration}ms of silence"
+            )
         }
     }
 
+
     // ======================
-    // Helpers
+    // STOP EVERYTHING
     // ======================
 
-    private fun updateNoiseFloor(rms: Double) {
-        noiseFloor =
-            if (noiseFloor == 0.0) rms
-            else NOISE_SMOOTHING * noiseFloor + (1 - NOISE_SMOOTHING) * rms
+    private fun stopServiceCompletely() {
+        Log.d("VoicePause", "Stopping service")
+
+        micRunning = false
+        handler.removeCallbacksAndMessages(null)
+        stopForeground(true)
+
+        sendBroadcast(Intent(ACTION_SERVICE_STOPPED))
+        stopSelf()
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        micRunning = false
+        workerThread.quitSafely()
+        Log.d("VoicePause", "Service destroyed")
+    }
+
+    // ======================
+    // UTIL
+    // ======================
 
     private fun calculateRms(buffer: ShortArray, read: Int): Double {
         var sum = 0.0
@@ -216,24 +261,7 @@ class VoiceMonitorService : Service() {
     }
 
     // ======================
-    // Stop
-    // ======================
-
-    private fun stopServiceCompletely() {
-        micRunning = false
-        handler.removeCallbacksAndMessages(null)
-        stopForeground(true)
-        sendBroadcast(Intent(ACTION_SERVICE_STOPPED))
-        stopSelf()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        micRunning = false
-    }
-
-    // ======================
-    // Notification
+    // NOTIFICATION
     // ======================
 
     private fun createNotification(): Notification {
