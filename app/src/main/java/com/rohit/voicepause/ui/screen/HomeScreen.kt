@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.rohit.voicepause.Settings
 import com.rohit.voicepause.VoiceMonitorService
 import com.rohit.voicepause.ui.components.StatusCard
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -29,30 +30,40 @@ fun HomeScreen(
         Settings.migrate(context)
     }
 
-    // Service state
-    var isRunning by remember {
-        mutableStateOf(Settings.isServiceRunning(context))
-    }
-
+    // ✅ Single source of truth
+    var isRunning by remember { mutableStateOf(false) }
     var showStoppedSnackbar by remember { mutableStateOf(false) }
 
-    // ⏱ Resume delay in SECONDS (1–10)
+    // ⏱ Resume delay (1–10 seconds)
     var resumeDelaySeconds by remember {
         mutableStateOf(Settings.getSilenceDurationSeconds(context).toFloat())
     }
 
-    // Listen for service stop broadcast
+    // 🔁 Initial sync
+    LaunchedEffect(Unit) {
+        isRunning = Settings.isServiceRunning(context)
+    }
+
+    // 🔔 Broadcast listener (fast updates)
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                if (intent?.action == VoiceMonitorService.ACTION_SERVICE_STOPPED) {
-                    isRunning = false
-                    showStoppedSnackbar = true
+                when (intent?.action) {
+                    VoiceMonitorService.ACTION_SERVICE_STARTED -> {
+                        isRunning = true
+                    }
+                    VoiceMonitorService.ACTION_SERVICE_STOPPED -> {
+                        isRunning = false
+                        showStoppedSnackbar = true
+                    }
                 }
             }
         }
 
-        val filter = IntentFilter(VoiceMonitorService.ACTION_SERVICE_STOPPED)
+        val filter = IntentFilter().apply {
+            addAction(VoiceMonitorService.ACTION_SERVICE_STARTED)
+            addAction(VoiceMonitorService.ACTION_SERVICE_STOPPED)
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -63,7 +74,7 @@ fun HomeScreen(
         onDispose { context.unregisterReceiver(receiver) }
     }
 
-    // Snackbar
+    // 🍿 Snackbar
     LaunchedEffect(showStoppedSnackbar) {
         if (showStoppedSnackbar) {
             snackbarHostState.showSnackbar("VoicePause service stopped")
@@ -91,7 +102,7 @@ fun HomeScreen(
 
             StatusCard(isRunning = isRunning)
 
-            // ⏱ Resume Delay (1–10 seconds)
+            // ⏱ Resume Delay
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -99,11 +110,7 @@ fun HomeScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Resume Delay",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
+                    Text("Resume Delay", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Slider(
@@ -121,35 +128,6 @@ fun HomeScreen(
                         text = "Resume music after ${resumeDelaySeconds.toInt()} second(s) of silence",
                         style = MaterialTheme.typography.bodySmall
                     )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = "Controls how long VoicePause waits after you stop speaking before resuming music.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // ℹ️ Info
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "How it works",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "VoicePause listens for your voice while music is playing. When you speak, it pauses the music. When you stop speaking, it waits for the selected delay and then resumes playback automatically.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
                 }
             }
 
@@ -157,7 +135,6 @@ fun HomeScreen(
             Button(
                 onClick = {
                     onStartClick()
-                    isRunning = true
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isRunning
@@ -169,12 +146,22 @@ fun HomeScreen(
             OutlinedButton(
                 onClick = {
                     onStopClick()
-                    isRunning = false
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = isRunning
             ) {
                 Text("Stop")
+            }
+        }
+    }
+
+    // 🔁 FINAL SAFETY RE-SYNC (this fixes the green-dot case)
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500)
+            val actual = Settings.isServiceRunning(context)
+            if (actual != isRunning) {
+                isRunning = actual
             }
         }
     }
