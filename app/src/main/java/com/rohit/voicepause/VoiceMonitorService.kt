@@ -2,44 +2,40 @@ package com.rohit.voicepause
 
 import android.app.*
 import android.content.Intent
-import android.media.AudioManager
+import android.media.*
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.rohit.voicepause.audio.VadProcessor
 
-/**
- * Foreground service for voice-activated music pause/resume
- *
- * Uses heuristic VAD with temporal validation to detect speech and
- * pause/resume music during conversations.
- */
 class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
 
+    companion object {
+        private const val TAG = "VoicePause/Service"
+
+        const val ACTION_SERVICE_STOPPED = "com.rohit.voicepause.ACTION_SERVICE_STOPPED"
+        private const val ACTION_STOP_SERVICE = "com.rohit.voicepause.ACTION_STOP_SERVICE"
+        private const val NOTIFICATION_ID = 100
+
+        private const val AUTO_STOP_TIMEOUT_MS = 60_000L
+        private const val MONITOR_INTERVAL_MS = 1000L
+    }
+
+    // ===== SYSTEM =====
     private lateinit var audioManager: AudioManager
     private lateinit var vadProcessor: VadProcessor
 
-    // ===== MUSIC CONTROL STATE =====
-    private var hasAudioFocus = false
+    // ===== AUDIO FOCUS =====
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    // ===== STATE FLAGS =====
     private var pausedByVoice = false
-    private var speechEventInProgress = false
-
-    // ===== MUSIC IDLE DETECTION =====
-    private var lastMusicActiveTime = 0L
     private var musicEverPlayed = false
-    private val AUTO_STOP_TIMEOUT_MS = 60_000L
+    private var lastMusicActiveTime = 0L
 
-    // ===== BACKGROUND PROCESSING =====
+    // ===== THREADING =====
     private lateinit var workerThread: HandlerThread
     private lateinit var handler: Handler
-
-    companion object {
-        private const val TAG = "VoiceMonitorService"
-
-        const val ACTION_SERVICE_STOPPED = "com.rohit.voicepause.ACTION_SERVICE_STOPPED"
-        private const val NOTIFICATION_ID = 100
-        private const val ACTION_STOP_SERVICE = "com.rohit.voicepause.ACTION_STOP_SERVICE"
-    }
 
     // ======================
     // SERVICE LIFECYCLE
@@ -47,7 +43,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "Service created")
+        Log.i(TAG, "Service CREATED")
 
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         vadProcessor = VadProcessor()
@@ -58,151 +54,172 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "Service started")
+        Log.i(TAG, "Service STARTED")
 
         Settings.setServiceRunning(applicationContext, true)
-        startForeground(NOTIFICATION_ID, createNotification())
+        startForeground(NOTIFICATION_ID, createNotification("Listening for voice"))
 
         lastMusicActiveTime = System.currentTimeMillis()
 
         if (intent?.action == ACTION_STOP_SERVICE) {
+            Log.w(TAG, "Stop requested from notification")
             stopServiceCompletely("Manual stop")
             return START_NOT_STICKY
         }
 
-        initializeVadProcessor()
-
-        handler.removeCallbacks(musicMonitoringLoop)
-        handler.post(musicMonitoringLoop)
+        initializeVad()
+        handler.post(musicMonitorLoop)
 
         return START_STICKY
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
-
     override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "Service destroyed")
-
-        vadProcessor.release()
+        Log.i(TAG, "Service DESTROYED")
 
         handler.removeCallbacksAndMessages(null)
+        vadProcessor.release()
+        abandonAudioFocus()
         workerThread.quitSafely()
 
-        releaseAudioFocusIfHeld()
         Settings.setServiceRunning(applicationContext, false)
+        super.onDestroy()
     }
 
+    override fun onBind(intent: Intent?): IBinder? = null
+
     // ======================
-    // VAD PROCESSOR SETUP
+    // VAD INIT
     // ======================
 
-    private fun initializeVadProcessor() {
+    private fun initializeVad() {
         val silenceDelayMs = Settings.getSilenceDuration(applicationContext)
 
-        val success = vadProcessor.initialize(
+        Log.i(
+            TAG,
+            "Initializing VAD | silenceDelay=${silenceDelayMs}ms"
+        )
+
+        val ok = vadProcessor.initialize(
             listener = this,
             silenceDelayMs = silenceDelayMs
         )
 
-        if (!success) {
-            Log.e(TAG, "Failed to initialize VAD processor")
-            stopServiceCompletely("VAD initialization failed")
-        } else {
-            Log.i(TAG, "VAD processor initialized")
+        if (!ok) {
+            Log.e(TAG, "VAD INIT FAILED")
+            stopServiceCompletely("VAD init failed")
         }
     }
 
     // ======================
-    // MUSIC MONITORING LOOP
+    // MUSIC MONITOR LOOP
     // ======================
 
-    private val musicMonitoringLoop = object : Runnable {
+    private val musicMonitorLoop = object : Runnable {
         override fun run() {
             try {
                 val now = System.currentTimeMillis()
                 val musicPlaying = audioManager.isMusicActive
 
-                if (musicPlaying) {
+                Log.v(
+                    TAG,
+                    "Monitor | musicPlaying=$musicPlaying pausedByVoice=$pausedByVoice"
+                )
+
+                if (musicPlaying || pausedByVoice) {
+                    // Music playing OR paused by us → keep VAD alive
                     musicEverPlayed = true
                     lastMusicActiveTime = now
-                    startVadIfNeeded()
-                } else {
-                    stopVadIfNeeded()
 
-                    if (musicEverPlayed && !pausedByVoice) {
-                        val idleDuration = now - lastMusicActiveTime
-                        if (idleDuration >= AUTO_STOP_TIMEOUT_MS) {
+                    if (!vadProcessor.isRunning()) {
+                        Log.i(TAG, "Starting VAD (music active or paused-by-voice)")
+                        vadProcessor.start()
+                    }
+                } else {
+                    // Music genuinely stopped
+                    if (vadProcessor.isRunning()) {
+                        Log.i(TAG, "Stopping VAD (music stopped)")
+                        vadProcessor.stop()
+                    }
+
+                    if (musicEverPlayed) {
+                        val idle = now - lastMusicActiveTime
+                        Log.v(TAG, "Music idle for ${idle}ms")
+
+                        if (idle >= AUTO_STOP_TIMEOUT_MS) {
                             stopServiceCompletely("Auto-stop: music idle")
                             return
                         }
                     }
                 }
 
-                updateVadSettings()
-                handler.postDelayed(this, 1000)
+                // Sync silence delay dynamically (slider support)
+                val newDelay = Settings.getSilenceDuration(applicationContext)
+                if (newDelay != vadProcessor.getSilenceDelay()) {
+                    Log.i(TAG, "Updating silence delay → ${newDelay}ms")
+                    vadProcessor.setSilenceDelay(newDelay)
+                }
+
+                handler.postDelayed(this, MONITOR_INTERVAL_MS)
 
             } catch (e: Exception) {
-                Log.e(TAG, "Music monitoring error", e)
-                stopServiceCompletely("Monitoring error: ${e.message}")
+                Log.e(TAG, "Monitor loop CRASH", e)
+                stopServiceCompletely("Monitor crash: ${e.message}")
             }
-        }
-    }
-
-    private fun startVadIfNeeded() {
-        if (!vadProcessor.isRunning()) {
-            if (!vadProcessor.start()) {
-                stopServiceCompletely("Failed to start VAD")
-            }
-        }
-    }
-
-    private fun stopVadIfNeeded() {
-        if (vadProcessor.isRunning()) {
-            vadProcessor.stop()
-        }
-    }
-
-    private fun updateVadSettings() {
-        val currentSilenceDelay = Settings.getSilenceDuration(applicationContext)
-        if (currentSilenceDelay != vadProcessor.getSilenceDelay()) {
-            vadProcessor.setSilenceDelay(currentSilenceDelay)
         }
     }
 
     // ======================
-    // MUSIC CONTROL
+    // AUDIO FOCUS
     // ======================
 
     private fun pauseMusic() {
-        if (pausedByVoice) return
+        if (pausedByVoice) {
+            Log.v(TAG, "pauseMusic ignored (already paused)")
+            return
+        }
 
-        val result = audioManager.requestAudioFocus(
-            null,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
-        )
+        Log.i(TAG, "Requesting audio focus to PAUSE music")
+
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setAcceptsDelayedFocusGain(false)
+            .setOnAudioFocusChangeListener { }
+            .build()
+
+        val result = audioManager.requestAudioFocus(request)
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            hasAudioFocus = true
+            audioFocusRequest = request
             pausedByVoice = true
+            Log.i(TAG, "Music PAUSED by VoicePause")
             updateNotification("Voice detected – Music paused")
+        } else {
+            Log.w(TAG, "Audio focus request DENIED")
         }
     }
 
     private fun resumeMusic() {
-        if (!pausedByVoice) return
+        if (!pausedByVoice) {
+            Log.v(TAG, "resumeMusic ignored (not paused by voice)")
+            return
+        }
 
-        releaseAudioFocusIfHeld()
+        Log.i(TAG, "Resuming music (releasing audio focus)")
+        abandonAudioFocus()
         pausedByVoice = false
-        speechEventInProgress = false
         updateNotification("Listening for voice")
     }
 
-    private fun releaseAudioFocusIfHeld() {
-        if (hasAudioFocus) {
-            audioManager.abandonAudioFocus(null)
-            hasAudioFocus = false
+    private fun abandonAudioFocus() {
+        audioFocusRequest?.let {
+            audioManager.abandonAudioFocusRequest(it)
+            audioFocusRequest = null
+            Log.i(TAG, "Audio focus RELEASED")
         }
     }
 
@@ -211,33 +228,32 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     // ======================
 
     override fun onSpeechDetected() {
-        if (!speechEventInProgress) {
-            speechEventInProgress = true
-            pauseMusic()
-        }
+        Log.i(TAG, "🔥 SPEECH DETECTED (callback)")
+        pauseMusic()
     }
 
     override fun onSpeechEnded() {
+        Log.i(TAG, "🟢 SPEECH ENDED (callback)")
         resumeMusic()
     }
 
     override fun onVadError(error: String) {
-        Log.e(TAG, "VAD error: $error")
-        stopServiceCompletely("VAD error: $error")
+        Log.e(TAG, "VAD ERROR: $error")
+        stopServiceCompletely("VAD error")
     }
 
     // ======================
-    // SERVICE CONTROL
+    // SERVICE STOP
     // ======================
 
     private fun stopServiceCompletely(reason: String) {
-        Log.i(TAG, "Stopping service: $reason")
+        Log.w(TAG, "SERVICE STOPPING → $reason")
 
-        Settings.setServiceRunning(applicationContext, false)
         handler.removeCallbacksAndMessages(null)
         vadProcessor.stop()
-        releaseAudioFocusIfHeld()
+        abandonAudioFocus()
 
+        Settings.setServiceRunning(applicationContext, false)
         stopForeground(true)
         sendBroadcast(Intent(ACTION_SERVICE_STOPPED))
         stopSelf()
@@ -247,36 +263,26 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     // NOTIFICATION
     // ======================
 
-    private fun createNotification(): Notification =
-        createNotificationWithText("Listening for voice")
-
-    private fun updateNotification(text: String) {
-        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, createNotificationWithText(text))
-    }
-
-    private fun createNotificationWithText(text: String): Notification {
+    private fun createNotification(text: String): Notification {
         val channelId = "voice_pause_channel"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "VoicePause Service",
+                "VoicePause",
                 NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Voice-activated music pause service"
-                setShowBadge(false)
-            }
+            )
             getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(channel)
         }
 
-        val stopIntent = Intent(this, VoiceMonitorService::class.java).apply {
-            action = ACTION_STOP_SERVICE
-        }
+        val stopIntent = Intent(this, VoiceMonitorService::class.java)
+            .setAction(ACTION_STOP_SERVICE)
 
         val stopPendingIntent = PendingIntent.getService(
-            this, 0, stopIntent,
+            this,
+            0,
+            stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -285,8 +291,12 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
             .addAction(R.drawable.ic_notification, "Stop", stopPendingIntent)
             .build()
+    }
+
+    private fun updateNotification(text: String) {
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIFICATION_ID, createNotification(text))
     }
 }

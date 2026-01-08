@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Migrate old settings to new VAD-based system
-        Settings.migrateOldSettings(this)
+        Settings.migrate(this)
 
         setContent {
             VoicePauseTheme {

@@ -24,32 +24,24 @@ fun HomeScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Migrate old settings on first load
+    // One-time migration
     LaunchedEffect(Unit) {
-        Settings.migrateOldSettings(context)
+        Settings.migrate(context)
     }
 
-    // 🔁 Service state
+    // Service state
     var isRunning by remember {
         mutableStateOf(Settings.isServiceRunning(context))
     }
-    DisposableEffect(Unit) {
-        isRunning = Settings.isServiceRunning(context)
-        onDispose {}
-    }
+
     var showStoppedSnackbar by remember { mutableStateOf(false) }
 
-    // 🎙 VAD Aggressiveness (0-3)
-    var vadAggressiveness by remember {
-        mutableStateOf(Settings.getVadAggressiveness(context).toFloat())
+    // ⏱ Resume delay in SECONDS (1–10)
+    var resumeDelaySeconds by remember {
+        mutableStateOf(Settings.getSilenceDurationSeconds(context).toFloat())
     }
 
-    // ⏱ Silence duration (milliseconds: 100-5000)
-    var silenceDuration by remember {
-        mutableStateOf(Settings.getSilenceDuration(context).toFloat())
-    }
-
-    // 🔔 Listen for service stop broadcast
+    // Listen for service stop broadcast
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -68,12 +60,10 @@ fun HomeScreen(
             context.registerReceiver(receiver, filter)
         }
 
-        onDispose {
-            context.unregisterReceiver(receiver)
-        }
+        onDispose { context.unregisterReceiver(receiver) }
     }
 
-    // 🍿 Snackbar
+    // Snackbar
     LaunchedEffect(showStoppedSnackbar) {
         if (showStoppedSnackbar) {
             snackbarHostState.showSnackbar("VoicePause service stopped")
@@ -101,7 +91,7 @@ fun HomeScreen(
 
             StatusCard(isRunning = isRunning)
 
-            // 🎙 VAD Aggressiveness
+            // ⏱ Resume Delay (1–10 seconds)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -109,82 +99,40 @@ fun HomeScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Voice Detection Sensitivity", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Resume Delay",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Slider(
-                        value = vadAggressiveness,
+                        value = resumeDelaySeconds,
                         onValueChange = {
-                            vadAggressiveness = it
-                            Settings.setVadAggressiveness(context, it.toInt())
+                            val rounded = it.toInt().coerceIn(1, 10)
+                            resumeDelaySeconds = rounded.toFloat()
+                            Settings.setSilenceDurationSeconds(context, rounded)
                         },
-                        valueRange = 0f..3f,
-                        steps = 2
+                        valueRange = 1f..10f,
+                        steps = 8
                     )
 
-                    val sensitivityText = when (vadAggressiveness.toInt()) {
-                        0 -> "Quality (least aggressive)"
-                        1 -> "Balanced (recommended)"
-                        2 -> "Aggressive (noisy environments)"
-                        3 -> "Very aggressive (very noisy)"
-                        else -> "Balanced"
-                    }
-
                     Text(
-                        text = "Level ${vadAggressiveness.toInt()}: $sensitivityText",
+                        text = "Resume music after ${resumeDelaySeconds.toInt()} second(s) of silence",
                         style = MaterialTheme.typography.bodySmall
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     Text(
-                        text = "Higher levels filter out more background noise but may miss quiet speech",
+                        text = "Controls how long VoicePause waits after you stop speaking before resuming music.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // ⏱ Silence Duration
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Resume Delay", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Slider(
-                        value = silenceDuration,
-                        onValueChange = {
-                            silenceDuration = it
-                            Settings.setSilenceDuration(context, it.toLong())
-                        },
-                        valueRange = 100f..5000f,
-                        steps = 48 // 100ms increments
-                    )
-
-                    Text(
-                        text = "Resume after ${(silenceDuration / 1000).let { 
-                            if (it < 1) "${silenceDuration.toInt()}ms" 
-                            else "${String.format("%.1f", it)}s" 
-                        }} of silence",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Text(
-                        text = "How long to wait after you stop speaking before resuming music",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // ℹ️ Information Card
+            // ℹ️ Info
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -193,12 +141,12 @@ fun HomeScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "How it works",
+                        "How it works",
                         style = MaterialTheme.typography.titleSmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "VoicePause uses advanced voice activity detection to automatically pause music when you speak and resume it when you're done. It only runs when music is playing to save battery.",
+                        text = "VoicePause listens for your voice while music is playing. When you speak, it pauses the music. When you stop speaking, it waits for the selected delay and then resumes playback automatically.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
