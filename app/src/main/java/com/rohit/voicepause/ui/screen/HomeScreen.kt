@@ -12,8 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.rohit.voicepause.ProfileIntent
 import com.rohit.voicepause.Settings
 import com.rohit.voicepause.VoiceMonitorService
+import com.rohit.voicepause.audio.AudioProfile
 import com.rohit.voicepause.ui.components.StatusCard
 import kotlinx.coroutines.delay
 
@@ -30,21 +32,26 @@ fun HomeScreen(
         Settings.migrate(context)
     }
 
-    // ✅ Single source of truth
+    // ===== SERVICE STATE =====
     var isRunning by remember { mutableStateOf(false) }
     var showStoppedSnackbar by remember { mutableStateOf(false) }
 
-    // ⏱ Resume delay (1–10 seconds)
+    // ===== PROFILE STATE =====
+    var selectedProfile by remember {
+        mutableStateOf(AudioProfile.BUSY)
+    }
+
+    // ===== RESUME DELAY =====
     var resumeDelaySeconds by remember {
         mutableStateOf(Settings.getSilenceDurationSeconds(context).toFloat())
     }
 
-    // 🔁 Initial sync
+    // Initial sync
     LaunchedEffect(Unit) {
         isRunning = Settings.isServiceRunning(context)
     }
 
-    // 🔔 Broadcast listener (fast updates)
+    // Broadcast listener
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -74,7 +81,7 @@ fun HomeScreen(
         onDispose { context.unregisterReceiver(receiver) }
     }
 
-    // 🍿 Snackbar
+    // Snackbar
     LaunchedEffect(showStoppedSnackbar) {
         if (showStoppedSnackbar) {
             snackbarHostState.showSnackbar("VoicePause service stopped")
@@ -102,7 +109,7 @@ fun HomeScreen(
 
             StatusCard(isRunning = isRunning)
 
-            // ⏱ Resume Delay
+            // ===== AUDIO PROFILE =====
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -110,7 +117,52 @@ fun HomeScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Resume Delay", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Audio Profile",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    AudioProfile.values().forEach { profile ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            RadioButton(
+                                selected = selectedProfile == profile,
+                                onClick = {
+                                    selectedProfile = profile
+                                    context.sendBroadcast(
+                                        Intent(ProfileIntent.ACTION_PROFILE_CHANGED).apply {
+                                            putExtra(
+                                                ProfileIntent.EXTRA_PROFILE_NAME,
+                                                profile.name
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(profile.displayName)
+                        }
+                    }
+                }
+            }
+
+            // ===== RESUME DELAY =====
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Resume Delay",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Slider(
@@ -131,22 +183,18 @@ fun HomeScreen(
                 }
             }
 
-            // ▶ Start
+            // ===== START =====
             Button(
-                onClick = {
-                    onStartClick()
-                },
+                onClick = onStartClick,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isRunning
             ) {
                 Text("Start Voice Detection")
             }
 
-            // ⏹ Stop
+            // ===== STOP =====
             OutlinedButton(
-                onClick = {
-                    onStopClick()
-                },
+                onClick = onStopClick,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = isRunning
             ) {
@@ -155,7 +203,7 @@ fun HomeScreen(
         }
     }
 
-    // 🔁 FINAL SAFETY RE-SYNC (this fixes the green-dot case)
+    // Final safety re-sync (prevents UI desync edge cases)
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)
