@@ -17,6 +17,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Migrate old settings to new VAD-based system
+        Settings.migrateOldSettings(this)
+
         setContent {
             VoicePauseTheme {
                 HomeScreen(
