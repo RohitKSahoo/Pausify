@@ -16,7 +16,6 @@ import com.rohit.voicepause.ProfileIntent
 import com.rohit.voicepause.Settings
 import com.rohit.voicepause.VoiceMonitorService
 import com.rohit.voicepause.audio.AudioProfile
-import com.rohit.voicepause.ui.components.StatusCard
 import kotlinx.coroutines.delay
 
 @Composable
@@ -32,16 +31,14 @@ fun HomeScreen(
         Settings.migrate(context)
     }
 
-    // ===== SERVICE STATE =====
+    // ===== STATE =====
     var isRunning by remember { mutableStateOf(false) }
     var showStoppedSnackbar by remember { mutableStateOf(false) }
 
-    // ===== PROFILE STATE =====
     var selectedProfile by remember {
         mutableStateOf(AudioProfile.BUSY)
     }
 
-    // ===== RESUME DELAY =====
     var resumeDelaySeconds by remember {
         mutableStateOf(Settings.getSilenceDurationSeconds(context).toFloat())
     }
@@ -51,7 +48,7 @@ fun HomeScreen(
         isRunning = Settings.isServiceRunning(context)
     }
 
-    // Broadcast listener
+    // Service broadcast listener
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -78,13 +75,15 @@ fun HomeScreen(
             context.registerReceiver(receiver, filter)
         }
 
-        onDispose { context.unregisterReceiver(receiver) }
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
     }
 
     // Snackbar
     LaunchedEffect(showStoppedSnackbar) {
         if (showStoppedSnackbar) {
-            snackbarHostState.showSnackbar("VoicePause service stopped")
+            snackbarHostState.showSnackbar("Pausify service stopped")
             showStoppedSnackbar = false
         }
     }
@@ -103,18 +102,19 @@ fun HomeScreen(
         ) {
 
             Text(
-                text = "VoicePause",
+                text = "Pausify",
                 style = MaterialTheme.typography.headlineMedium
             )
 
-            StatusCard(isRunning = isRunning)
+            // ===== STATUS =====
+            Text(
+                text = if (isRunning) "Status: Listening" else "Status: Stopped",
+                style = MaterialTheme.typography.bodyMedium
+            )
 
             // ===== AUDIO PROFILE =====
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -152,10 +152,7 @@ fun HomeScreen(
 
             // ===== RESUME DELAY =====
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -177,22 +174,21 @@ fun HomeScreen(
                     )
 
                     Text(
-                        text = "Resume music after ${resumeDelaySeconds.toInt()} second(s) of silence",
+                        text = "Resume after ${resumeDelaySeconds.toInt()} second(s) of silence",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
 
-            // ===== START =====
+            // ===== START / STOP =====
             Button(
                 onClick = onStartClick,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isRunning
             ) {
-                Text("Start Voice Detection")
+                Text("Start")
             }
 
-            // ===== STOP =====
             OutlinedButton(
                 onClick = onStopClick,
                 modifier = Modifier.fillMaxWidth(),
@@ -203,7 +199,7 @@ fun HomeScreen(
         }
     }
 
-    // Final safety re-sync (prevents UI desync edge cases)
+    // Safety re-sync (prevents UI desync)
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)

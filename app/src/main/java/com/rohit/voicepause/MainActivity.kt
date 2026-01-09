@@ -7,7 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.core.app.ActivityCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.rohit.voicepause.ui.screen.HomeScreen
 import com.rohit.voicepause.ui.theme.VoicePauseTheme
@@ -17,71 +17,84 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Migrate old settings to new VAD-based system
+        // One-time migration
         Settings.migrate(this)
 
         setContent {
             VoicePauseTheme {
                 HomeScreen(
-                    onStartClick = { startVoicePause() },
+                    onStartClick = { requestPermissionsAndStart() },
                     onStopClick = { stopVoicePause() }
                 )
             }
         }
     }
 
-    private fun startVoicePause() {
-        // Notification permission (Android 13+)
+    // ======================
+    // PERMISSION HANDLING
+    // ======================
+
+    private val permissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+
+            val micGranted =
+                permissions[Manifest.permission.RECORD_AUDIO] == true
+
+            val notificationGranted =
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        permissions[Manifest.permission.POST_NOTIFICATIONS] == true
+
+            if (micGranted && notificationGranted) {
+                startVoicePauseInternal()
+            }
+        }
+
+    private fun requestPermissionsAndStart() {
+        val permissionsToRequest = mutableListOf<String>()
+
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsToRequest += Manifest.permission.RECORD_AUDIO
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                1001
-            )
-            return
+            permissionsToRequest += Manifest.permission.POST_NOTIFICATIONS
         }
 
-        // Microphone permission
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                1002
-            )
-            return
+        if (permissionsToRequest.isEmpty()) {
+            startVoicePauseInternal()
+        } else {
+            permissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
+    }
 
-        startForegroundService(
-            Intent(this, VoiceMonitorService::class.java)
-        )
+    // ======================
+    // SERVICE CONTROL
+    // ======================
+
+    private fun startVoicePauseInternal() {
+        val intent = Intent(this, VoiceMonitorService::class.java)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
     private fun stopVoicePause() {
         stopService(
             Intent(this, VoiceMonitorService::class.java)
         )
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) {
-            startVoicePause()
-        }
     }
 }

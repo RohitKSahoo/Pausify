@@ -9,21 +9,21 @@ enum class AudioProfile(
     QUIET(
         displayName = "Quiet Room",
         vadAggressiveness = 0,
-        minSpeechMs = 250,
+        minSpeechMs = 100,
         silenceDelayMs = 500
     ),
 
     BUSY(
         displayName = "Busy Room",
         vadAggressiveness = 2,
-        minSpeechMs = 400,
+        minSpeechMs = 200,
         silenceDelayMs = 800
     ),
 
     TRAFFIC(
         displayName = "Traffic / Outdoors",
         vadAggressiveness = 3,
-        minSpeechMs = 700,
+        minSpeechMs = 2200,
         silenceDelayMs = 1200
     );
 }
