@@ -2,6 +2,8 @@ package com.rohit.voicepause.audio
 
 import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.max
+import kotlin.math.sqrt
 
 class VadProcessor :
     AudioCapture.AudioFrameListener,
@@ -13,7 +15,6 @@ class VadProcessor :
 
     interface VadProcessorListener {
         fun onSpeechDetected()
-        fun onSpeechEnded()
         fun onVadError(error: String)
     }
 
@@ -21,10 +22,12 @@ class VadProcessor :
     private val audioCapture = AudioCapture()
     private lateinit var speechStateMachine: SpeechStateMachine
 
-    // 🔑 PROFILE BASE VALUES
+    // ===== PROFILE PARAMETERS =====
     private var baseMinSpeechMs = 400L
-    private var baseSilenceDelayMs = 800L
+    private var minVoiceEnergy = 300        // RMS threshold
+    private var vadAggressiveness = 2
 
+    // ===== STATE =====
     private val isRunning = AtomicBoolean(false)
     private var listener: VadProcessorListener? = null
 
@@ -39,14 +42,16 @@ class VadProcessor :
             return false
         }
 
-        baseMinSpeechMs = profile.minSpeechMs
-        baseSilenceDelayMs = profile.silenceDelayMs
+        // Apply profile parameters (CUSTOM handled elsewhere)
+        if (!profile.isCustom) {
+            vadAggressiveness = profile.vadAggressiveness
+            baseMinSpeechMs = profile.minSpeechMs
+            minVoiceEnergy = profile.minVoiceEnergy
+        }
+
 
         speechStateMachine = SpeechStateMachine(vadWrapper, this).apply {
-            configure(
-                minSpeechMs = baseMinSpeechMs,
-                silenceDelayMs = baseSilenceDelayMs
-            )
+            configure(minSpeechMs = baseMinSpeechMs)
         }
 
         if (!audioCapture.initialize(this)) {
@@ -54,13 +59,18 @@ class VadProcessor :
             return false
         }
 
-        Log.i(TAG, "Initialized with profile: ${profile.displayName}")
+        Log.i(
+            TAG,
+            "[PROFILE APPLIED] ${profile.displayName} → " +
+                    "vadAggressiveness=$vadAggressiveness, " +
+                    "minSpeechMs=$baseMinSpeechMs, " +
+                    "minVoiceEnergy=$minVoiceEnergy"
+        )
+
         return true
     }
 
     fun start(): Boolean {
-        if (isRunning.get()) return true
-
         if (!audioCapture.startCapture()) {
             listener?.onVadError("Failed to start audio capture")
             return false
@@ -68,13 +78,13 @@ class VadProcessor :
 
         isRunning.set(true)
         speechStateMachine.reset()
+        speechStateMachine.configure(minSpeechMs = baseMinSpeechMs)
+
         Log.i(TAG, "VAD started")
         return true
     }
 
     fun stop() {
-        if (!isRunning.get()) return
-
         isRunning.set(false)
         audioCapture.stopCapture()
         speechStateMachine.reset()
@@ -86,36 +96,53 @@ class VadProcessor :
         audioCapture.release()
         vadWrapper.destroy()
         listener = null
-        Log.i(TAG, "VAD released")
     }
 
     fun isRunning(): Boolean = isRunning.get()
 
     /**
-     * 🔁 Apply user resume delay ON TOP of profile base delay
+     * CUSTOM profile only
      */
-    fun applyUserResumeDelay(extraDelayMs: Long) {
+    fun applyUserSensitivity(multiplier: Float) {
         if (!::speechStateMachine.isInitialized) return
 
-        val effectiveDelay = baseSilenceDelayMs + extraDelayMs
+        val safeMultiplier = multiplier.coerceIn(0.8f, 1.8f)
 
-        speechStateMachine.configure(
-            minSpeechMs = baseMinSpeechMs,
-            silenceDelayMs = effectiveDelay
+        val effectiveMinSpeech =
+            (baseMinSpeechMs / safeMultiplier)
+                .toLong()
+                .coerceAtLeast(200L)
+
+        speechStateMachine.configure(minSpeechMs = effectiveMinSpeech)
+
+        Log.i(
+            TAG,
+            "[CUSTOM] Sensitivity applied → minSpeechMs=$effectiveMinSpeech"
         )
-
-        Log.i(TAG, "Effective silence delay → ${effectiveDelay}ms")
     }
 
     // ===== AudioCapture callbacks =====
 
     override fun onAudioFrame(audioFrame: ShortArray, timestamp: Long) {
-        if (!isRunning.get()) return
+        val rms = calculateRms(audioFrame)
+
+        if (rms < minVoiceEnergy) {
+            Log.d(
+                TAG,
+                "[VOICE REJECTED] RMS=$rms < threshold=$minVoiceEnergy"
+            )
+            return
+        }
+
+        Log.d(
+            TAG,
+            "[VOICE ENERGY OK] RMS=$rms ≥ threshold=$minVoiceEnergy"
+        )
+
         speechStateMachine.processFrame(audioFrame, timestamp)
     }
 
     override fun onCaptureError(error: String) {
-        Log.e(TAG, "Audio capture error: $error")
         listener?.onVadError(error)
         stop()
     }
@@ -123,10 +150,17 @@ class VadProcessor :
     // ===== Speech callbacks =====
 
     override fun onSpeechStarted() {
+        Log.i(TAG, "[VAD] Speech detected (valid)")
         listener?.onSpeechDetected()
     }
 
-    override fun onSpeechEnded() {
-        listener?.onSpeechEnded()
+    // ===== UTIL =====
+
+    private fun calculateRms(frame: ShortArray): Int {
+        var sum = 0.0
+        for (s in frame) {
+            sum += s * s
+        }
+        return sqrt(sum / frame.size).toInt()
     }
 }

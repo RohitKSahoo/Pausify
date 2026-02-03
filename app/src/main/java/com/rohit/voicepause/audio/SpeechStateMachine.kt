@@ -11,48 +11,30 @@ class SpeechStateMachine(
     companion object {
         private const val TAG = "SpeechStateMachine"
         private const val DEFAULT_MIN_SPEECH_MS = 400L
-        private const val DEFAULT_SILENCE_DELAY_MS = 800L
     }
 
     interface SpeechStateListener {
         fun onSpeechStarted()
-        fun onSpeechEnded()
     }
 
     private enum class State {
         IDLE,
         SPEECH_PENDING,
-        SPEECH_ACTIVE,
-        SILENCE_PENDING
+        SPEECH_ACTIVE
     }
 
     private var state = State.IDLE
-    private var stateStartTime = 0L
     private var speechStartTime = 0L
-
-    // 🔑 CONFIGURABLE PARAMETERS
     private var minSpeechDurationMs = DEFAULT_MIN_SPEECH_MS
-    private var silenceDelayMs = DEFAULT_SILENCE_DELAY_MS
 
-    fun configure(
-        minSpeechMs: Long = minSpeechDurationMs,
-        silenceDelayMs: Long = this.silenceDelayMs
-    ) {
-        this.minSpeechDurationMs = max(100L, minSpeechMs)
-        this.silenceDelayMs = max(100L, silenceDelayMs)
-
-        Log.i(
-            TAG,
-            "Configured → minSpeech=${this.minSpeechDurationMs}ms, silence=${this.silenceDelayMs}ms"
-        )
+    fun configure(minSpeechMs: Long = minSpeechDurationMs) {
+        minSpeechDurationMs = max(100L, minSpeechMs)
     }
 
     fun getMinSpeechMs(): Long = minSpeechDurationMs
-    fun getSilenceDelayMs(): Long = silenceDelayMs
 
     fun reset() {
         state = State.IDLE
-        stateStartTime = 0L
         speechStartTime = 0L
     }
 
@@ -73,29 +55,19 @@ class SpeechStateMachine(
             }
 
             State.SPEECH_PENDING -> {
-                if (isSpeech) {
-                    if (timestamp - speechStartTime >= minSpeechDurationMs) {
-                        state = State.SPEECH_ACTIVE
-                        listener.onSpeechStarted()
-                    }
-                } else {
+                if (isSpeech &&
+                    timestamp - speechStartTime >= minSpeechDurationMs
+                ) {
+                    state = State.SPEECH_ACTIVE
+                    listener.onSpeechStarted()
+                } else if (!isSpeech) {
                     state = State.IDLE
                 }
             }
 
             State.SPEECH_ACTIVE -> {
                 if (!isSpeech) {
-                    state = State.SILENCE_PENDING
-                    stateStartTime = timestamp
-                }
-            }
-
-            State.SILENCE_PENDING -> {
-                if (isSpeech) {
-                    state = State.SPEECH_ACTIVE
-                } else if (timestamp - stateStartTime >= silenceDelayMs) {
                     state = State.IDLE
-                    listener.onSpeechEnded()
                 }
             }
         }

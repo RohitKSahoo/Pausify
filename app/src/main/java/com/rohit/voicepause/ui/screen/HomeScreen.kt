@@ -17,6 +17,8 @@ import com.rohit.voicepause.Settings
 import com.rohit.voicepause.VoiceMonitorService
 import com.rohit.voicepause.audio.AudioProfile
 import kotlinx.coroutines.delay
+import android.util.Log
+
 
 @Composable
 fun HomeScreen(
@@ -26,11 +28,6 @@ fun HomeScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // One-time migration
-    LaunchedEffect(Unit) {
-        Settings.migrate(context)
-    }
-
     // ===== STATE =====
     var isRunning by remember { mutableStateOf(false) }
     var showStoppedSnackbar by remember { mutableStateOf(false) }
@@ -39,12 +36,22 @@ fun HomeScreen(
         mutableStateOf(AudioProfile.BUSY)
     }
 
-    var resumeDelaySeconds by remember {
-        mutableStateOf(Settings.getSilenceDurationSeconds(context).toFloat())
+    // Custom profile values ONLY
+    var customResumeDelaySeconds by remember {
+        mutableStateOf(
+            Settings.getCustomPauseDurationMs(context).toFloat()
+        )
+    }
+
+    var customVoiceSensitivity by remember {
+        mutableStateOf(
+            Settings.getCustomVoiceSensitivity(context)
+        )
     }
 
     // Initial sync
     LaunchedEffect(Unit) {
+        Settings.migrate(context)
         isRunning = Settings.isServiceRunning(context)
     }
 
@@ -106,17 +113,15 @@ fun HomeScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
 
-            // ===== STATUS =====
             Text(
                 text = if (isRunning) "Status: Listening" else "Status: Stopped",
                 style = MaterialTheme.typography.bodyMedium
             )
 
             // ===== AUDIO PROFILE =====
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
+
                     Text(
                         text = "Audio Profile",
                         style = MaterialTheme.typography.titleMedium
@@ -133,6 +138,14 @@ fun HomeScreen(
                                 selected = selectedProfile == profile,
                                 onClick = {
                                     selectedProfile = profile
+
+                                    Log.i(
+                                        "UI_PROFILE",
+                                        "User selected profile → ${profile.displayName}"
+                                    )
+
+                                    Settings.setSelectedProfile(context, profile)
+
                                     context.sendBroadcast(
                                         Intent(ProfileIntent.ACTION_PROFILE_CHANGED).apply {
                                             putExtra(
@@ -150,33 +163,75 @@ fun HomeScreen(
                 }
             }
 
-            // ===== RESUME DELAY =====
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Resume Delay",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+            // ===== CUSTOM PROFILE CONTROLS =====
+            if (selectedProfile.isCustom) {
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
 
-                    Slider(
-                        value = resumeDelaySeconds,
-                        onValueChange = {
-                            val rounded = it.toInt().coerceIn(1, 10)
-                            resumeDelaySeconds = rounded.toFloat()
-                            Settings.setSilenceDurationSeconds(context, rounded)
-                        },
-                        valueRange = 1f..10f,
-                        steps = 8
-                    )
+                        Text(
+                            text = "Custom Resume Delay",
+                            style = MaterialTheme.typography.titleMedium
+                        )
 
-                    Text(
-                        text = "Resume after ${resumeDelaySeconds.toInt()} second(s) of silence",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Slider(
+                            value = customResumeDelaySeconds,
+                            onValueChange = {
+                                val rounded = it.toInt().coerceIn(1, 10)
+                                customResumeDelaySeconds = rounded.toFloat()
+                                Settings.setCustomSilenceDurationSeconds(
+                                    context,
+                                    rounded
+                                )
+                            },
+                            valueRange = 1f..10f,
+                            steps = 8
+                        )
+
+                        Text(
+                            text = "Resume after ${customResumeDelaySeconds.toInt()} second(s) of silence",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+
+                        Text(
+                            text = "Voice Detection Sensitivity",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Slider(
+                            value = customVoiceSensitivity,
+                            onValueChange = {
+                                customVoiceSensitivity = it
+                                Settings.setCustomVoiceSensitivity(
+                                    context,
+                                    it
+                                )
+                            },
+                            valueRange = 0.8f..1.8f,
+                            steps = 4
+                        )
+
+                        Text(
+                            text = when {
+                                customVoiceSensitivity < 1.0f ->
+                                    "Low (ignores short sounds)"
+                                customVoiceSensitivity > 1.4f ->
+                                    "High (very sensitive)"
+                                else ->
+                                    "Medium (balanced)"
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
 
@@ -199,7 +254,7 @@ fun HomeScreen(
         }
     }
 
-    // Safety re-sync (prevents UI desync)
+    // Safety re-sync
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)

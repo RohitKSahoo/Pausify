@@ -1,98 +1,140 @@
 package com.rohit.voicepause
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
+import com.rohit.voicepause.audio.AudioProfile
 
 object Settings {
 
     private const val TAG = "VoicePause/Settings"
-    private const val PREFS = "voicepause_prefs"
+    private const val PREFS_NAME = "voice_pause_prefs"
 
-    private const val KEY_SILENCE_DURATION_MS = "silence_duration_ms"
+    // ===== KEYS =====
     private const val KEY_SERVICE_RUNNING = "service_running"
+    private const val KEY_SELECTED_PROFILE = "selected_audio_profile"
 
-    // Silence delay bounds
-    private const val MIN_SILENCE_SEC = 1
-    private const val MAX_SILENCE_SEC = 10
-    private const val DEFAULT_SILENCE_SEC = 2
+    // ===== CUSTOM PROFILE KEYS =====
+    private const val KEY_CUSTOM_SILENCE_DURATION = "custom_silence_duration_sec"
+    private const val KEY_CUSTOM_VOICE_SENSITIVITY = "custom_voice_sensitivity"
+
+    // ===== DEFAULTS =====
+    private const val DEFAULT_CUSTOM_SILENCE_DURATION = 2      // seconds
+    private const val DEFAULT_CUSTOM_VOICE_SENSITIVITY = 1.0f // multiplier
+
+    // ===== PREF ACCESS =====
+    private fun prefs(context: Context): SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // ======================
-    // Silence duration
+    // PROFILE SELECTION
     // ======================
 
-    /**
-     * Set silence duration using SECONDS (UI-friendly).
-     * Range enforced: 1s – 10s
-     */
-    fun setSilenceDurationSeconds(context: Context, seconds: Int) {
-        val clampedSec = seconds.coerceIn(MIN_SILENCE_SEC, MAX_SILENCE_SEC)
-        val millis = clampedSec * 1000L
+    fun getSelectedProfile(context: Context): AudioProfile {
+        val name = prefs(context).getString(
+            KEY_SELECTED_PROFILE,
+            AudioProfile.BUSY.name
+        )
 
-        Log.i(TAG, "Saving silence delay: ${clampedSec}s (${millis}ms)")
+        val profile = runCatching {
+            AudioProfile.valueOf(name!!)
+        }.getOrDefault(AudioProfile.BUSY)
 
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putLong(KEY_SILENCE_DURATION_MS, millis)
+        Log.i(TAG, "[GET] Selected profile → ${profile.displayName}")
+        return profile
+    }
+
+    fun setSelectedProfile(context: Context, profile: AudioProfile) {
+        prefs(context).edit()
+            .putString(KEY_SELECTED_PROFILE, profile.name)
             .apply()
-    }
 
-    /**
-     * Get silence duration in MILLISECONDS (service-friendly)
-     */
-    fun getSilenceDuration(context: Context): Long {
-        val millis = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getLong(KEY_SILENCE_DURATION_MS, DEFAULT_SILENCE_SEC * 1000L)
-
-        Log.v(TAG, "Loaded silence delay: ${millis}ms")
-        return millis
-    }
-
-    /**
-     * Get silence duration in SECONDS (UI-friendly)
-     */
-    fun getSilenceDurationSeconds(context: Context): Int {
-        val millis = getSilenceDuration(context)
-        return (millis / 1000L).toInt()
+        Log.i(TAG, "[SET] Selected profile → ${profile.displayName}")
     }
 
     // ======================
-    // Service state (UI sync)
+    // SERVICE STATE
     // ======================
-
-    fun setServiceRunning(context: Context, running: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_SERVICE_RUNNING, running)
-            .apply()
-    }
 
     fun isServiceRunning(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SERVICE_RUNNING, false)
+        return prefs(context).getBoolean(KEY_SERVICE_RUNNING, false)
+    }
+
+    fun setServiceRunning(context: Context, running: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_SERVICE_RUNNING, running)
+            .apply()
+
+        Log.i(TAG, "[SERVICE] running=$running")
     }
 
     // ======================
-    // Migration
+    // CUSTOM PROFILE — PAUSE DURATION
+    // ======================
+
+    fun getCustomPauseDurationMs(context: Context): Long {
+        val seconds = prefs(context).getInt(
+            KEY_CUSTOM_SILENCE_DURATION,
+            DEFAULT_CUSTOM_SILENCE_DURATION
+        )
+
+        val ms = seconds * 1000L
+
+        Log.i(
+            TAG,
+            "[CUSTOM] Pause duration → ${ms}ms ($seconds sec)"
+        )
+
+        return ms
+    }
+
+    fun setCustomSilenceDurationSeconds(context: Context, seconds: Int) {
+        prefs(context).edit()
+            .putInt(KEY_CUSTOM_SILENCE_DURATION, seconds)
+            .apply()
+
+        Log.i(
+            TAG,
+            "[CUSTOM] Pause duration set → ${seconds}s"
+        )
+    }
+
+    // ======================
+    // CUSTOM PROFILE — VOICE SENSITIVITY
+    // ======================
+
+    fun getCustomVoiceSensitivity(context: Context): Float {
+        val value = prefs(context).getFloat(
+            KEY_CUSTOM_VOICE_SENSITIVITY,
+            DEFAULT_CUSTOM_VOICE_SENSITIVITY
+        )
+
+        Log.i(
+            TAG,
+            "[CUSTOM] Voice sensitivity → $value"
+        )
+
+        return value
+    }
+
+    fun setCustomVoiceSensitivity(context: Context, value: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_CUSTOM_VOICE_SENSITIVITY, value)
+            .apply()
+
+        Log.i(
+            TAG,
+            "[CUSTOM] Voice sensitivity set → $value"
+        )
+    }
+
+    // ======================
+    // MIGRATION (FUTURE)
     // ======================
 
     fun migrate(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-        // If old value exists, normalize it
-        if (prefs.contains("silence_duration")) {
-            val old = prefs.getLong("silence_duration", 2000L)
-            val seconds = (old / 1000L).toInt().coerceIn(MIN_SILENCE_SEC, MAX_SILENCE_SEC)
-
-            Log.w(TAG, "Migrating old silence duration → ${seconds}s")
-
-            prefs.edit()
-                .remove("silence_duration")
-                .putLong(KEY_SILENCE_DURATION_MS, seconds * 1000L)
-                .apply()
-        }
-
-        if (!prefs.contains(KEY_SILENCE_DURATION_MS)) {
-            setSilenceDurationSeconds(context, DEFAULT_SILENCE_SEC)
-        }
+        // No-op for now
+        // Reserved for future schema changes
+        Log.i(TAG, "[MIGRATION] No action needed")
     }
 }
