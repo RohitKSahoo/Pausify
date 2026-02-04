@@ -27,6 +27,8 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
         private const val MONITOR_INTERVAL_MS = 1_000L
     }
 
+    private var userVoiceLocked = false
+
     // ===== SYSTEM =====
     private lateinit var audioManager: AudioManager
     private lateinit var vadProcessor: VadProcessor
@@ -39,6 +41,8 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     private var pausedByVoice = false
     private var musicEverPlayed = false
     private var lastMusicActiveTime = 0L
+    private val AMBIENT_FACTOR = 1.1f
+
 
     // ===== THREADING =====
     private lateinit var workerThread: HandlerThread
@@ -270,6 +274,8 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
 
         abandonAudioFocus()
         pausedByVoice = false
+        userVoiceLocked = false
+
 
         Log.i(TAG, "[AUDIO] Music resumed (reason=SILENCE_TIMEOUT)")
         updateNotification("Listening (${currentProfile.displayName})")
@@ -286,11 +292,53 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     // VAD CALLBACKS
     // ======================
 
-    override fun onSpeechDetected() {
-        Log.i(TAG, "[VAD] Voice detected")
-        pauseMusic()
+    override fun onSpeechDetected(
+        rms: Int,
+        isNear: Boolean
+    ) {
+
+        val base = currentProfile.minVoiceEnergy
+        val ambientLimit = (base * AMBIENT_FACTOR).toInt()
+
+        Log.i(
+            TAG,
+            "[VAD] Voice → rms=$rms near=$isNear locked=$userVoiceLocked " +
+                    "ambientLimit=$ambientLimit"
+        )
+
+        // ========================
+        // MUSIC PLAYING (STRICT)
+        // ========================
+        if (!pausedByVoice) {
+
+            // Only user voice allowed
+            if (!isNear) {
+                Log.d(TAG, "[VAD] Ignored distant voice")
+                return
+            }
+
+            userVoiceLocked = true
+            pauseMusic()
+        }
+
+        // ========================
+        // MUSIC PAUSED (RELAXED)
+        // ========================
+        else {
+
+            // Allow nearby voices
+            if (rms < ambientLimit) {
+                Log.d(TAG, "[VAD] Ambient too weak → ignored")
+                return
+            }
+        }
+
+        // Extend pause
         scheduleResume()
     }
+
+
+
 
     override fun onVadError(error: String) {
         Log.e(TAG, "[VAD ERROR] $error")

@@ -15,6 +15,8 @@ class SpeechStateMachine(
 
     interface SpeechStateListener {
         fun onSpeechStarted()
+        fun onSpeechActive()
+        fun onSpeechEnded()
     }
 
     private enum class State {
@@ -29,6 +31,11 @@ class SpeechStateMachine(
 
     fun configure(minSpeechMs: Long = minSpeechDurationMs) {
         minSpeechDurationMs = max(100L, minSpeechMs)
+
+        Log.i(
+            TAG,
+            "Configured → minSpeechMs=$minSpeechDurationMs"
+        )
     }
 
     fun getMinSpeechMs(): Long = minSpeechDurationMs
@@ -39,6 +46,7 @@ class SpeechStateMachine(
     }
 
     fun processFrame(audioFrame: ShortArray, timestamp: Long) {
+
         val isSpeech = try {
             vadWrapper.processFrame(audioFrame)
         } catch (e: Exception) {
@@ -47,27 +55,62 @@ class SpeechStateMachine(
         }
 
         when (state) {
+
+            // ======================
+            // IDLE
+            // ======================
             State.IDLE -> {
+
                 if (isSpeech) {
                     state = State.SPEECH_PENDING
                     speechStartTime = timestamp
+
+                    Log.d(TAG, "→ SPEECH_PENDING")
                 }
             }
 
+            // ======================
+            // CONFIRMING SPEECH
+            // ======================
             State.SPEECH_PENDING -> {
-                if (isSpeech &&
-                    timestamp - speechStartTime >= minSpeechDurationMs
-                ) {
-                    state = State.SPEECH_ACTIVE
-                    listener.onSpeechStarted()
-                } else if (!isSpeech) {
+
+                if (isSpeech) {
+
+                    if (timestamp - speechStartTime >= minSpeechDurationMs) {
+
+                        state = State.SPEECH_ACTIVE
+
+                        Log.d(TAG, "→ SPEECH_ACTIVE (confirmed)")
+
+                        listener.onSpeechStarted()
+                    }
+
+                } else {
+                    // False alarm
                     state = State.IDLE
+
+                    Log.d(TAG, "→ IDLE (pending cancelled)")
                 }
             }
 
+            // ======================
+            // ACTIVE SPEECH
+            // ======================
             State.SPEECH_ACTIVE -> {
-                if (!isSpeech) {
+
+                if (isSpeech) {
+
+                    // 🔥 Continuous callback
+                    listener.onSpeechActive()
+
+                } else {
+
+                    // Speech ended
                     state = State.IDLE
+
+                    Log.d(TAG, "→ IDLE (speech ended)")
+
+                    listener.onSpeechEnded()
                 }
             }
         }

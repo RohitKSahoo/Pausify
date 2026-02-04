@@ -23,14 +23,14 @@ enum class AudioProfile(
         vadAggressiveness = 3,
         minSpeechMs = 100L,
         minVoiceEnergy = 300,
-        pauseHoldMs = 2_000L
+        pauseHoldMs = 3_000L
     ),
 
     BUSY(
         displayName = "Busy Room",
         vadAggressiveness = 2,
         minSpeechMs = 250L,
-        minVoiceEnergy = 500,
+        minVoiceEnergy = 400,
         pauseHoldMs = 5_000L
     ),
 
@@ -38,7 +38,7 @@ enum class AudioProfile(
         displayName = "Traffic / Outdoors",
         vadAggressiveness = 1,
         minSpeechMs = 700L,
-        minVoiceEnergy = 1_200,
+        minVoiceEnergy = 1_000,
         pauseHoldMs = 7_000L
     ),
 
