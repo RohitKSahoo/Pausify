@@ -1,17 +1,19 @@
 package com.rohit.voicepause.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.rohit.voicepause.ui.screen.Screen
@@ -46,14 +48,24 @@ fun PausifyBottomNav(navController: NavController) {
                 val isSelected = currentRoute == screen.route
                 val contentColor = if (isSelected) PausifyRed else TextSecondary
                 
+                // Animate the line width from 0 to 24dp
+                val lineWidth by animateDpAsState(
+                    targetValue = if (isSelected) 24.dp else 0.dp,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    label = "lineWidth"
+                )
+
                 Box(
                     modifier = Modifier
                         .height(56.dp)
                         .weight(1f)
-                        .padding(horizontal = 4.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) Color.DarkGray.copy(alpha = 0.3f) else Color.Transparent)
-                        .clickable {
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null // Removes the default ripple highlight
+                        ) {
                             if (currentRoute != screen.route) {
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.startDestinationId)
@@ -63,28 +75,29 @@ fun PausifyBottomNav(navController: NavController) {
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         Icon(
                             imageVector = screen.icon,
                             contentDescription = screen.title,
                             tint = contentColor,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(26.dp)
                         )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = screen.title.uppercase(),
-                            color = contentColor,
-                            fontSize = 10.sp,
-                            style = MaterialTheme.typography.labelSmall
+                        
+                        Spacer(Modifier.height(6.dp))
+                        
+                        // Animated red line
+                        Box(
+                            modifier = Modifier
+                                .height(2.dp)
+                                .width(lineWidth)
+                                .background(
+                                    color = if (lineWidth > 0.dp) PausifyRed else Color.Transparent,
+                                    shape = RoundedCornerShape(1.dp)
+                                )
                         )
-                        if (isSelected) {
-                            Spacer(Modifier.height(4.dp))
-                            Box(
-                                Modifier
-                                    .size(4.dp)
-                                    .background(PausifyRed)
-                            )
-                        }
                     }
                 }
             }

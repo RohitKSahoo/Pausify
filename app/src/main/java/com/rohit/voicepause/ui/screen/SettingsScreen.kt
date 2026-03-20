@@ -1,6 +1,8 @@
 package com.rohit.voicepause.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +28,7 @@ fun SettingsScreen() {
     // States linked to Settings
     var sensitivity by remember { mutableStateOf(Settings.getCustomVoiceSensitivity(context)) }
     var pauseSec by remember { mutableStateOf((Settings.getCustomPauseDurationMs(context) / 1000).toInt()) }
+    var backgroundProcessEnabled by remember { mutableStateOf(Settings.isServiceRunning(context)) }
 
     Column(
         modifier = Modifier
@@ -40,7 +43,7 @@ fun SettingsScreen() {
                 "SETTINGS",
                 style = MaterialTheme.typography.headlineLarge,
                 color = Color.White,
-                fontSize = 40.sp // Increased from 32
+                fontSize = 40.sp
             )
             Text(
                 "ENGINE CONFIGURATION V2.4",
@@ -74,10 +77,11 @@ fun SettingsScreen() {
                 value = "${pauseSec}.00s",
                 hasChevron = true,
                 onClick = {
-                    val next = when(pauseSec) {
+                    val next = when (pauseSec) {
+                        3 -> 5
                         5 -> 10
                         10 -> 15
-                        else -> 5
+                        else -> 3
                     }
                     pauseSec = next
                     Settings.setCustomPauseSeconds(context, next)
@@ -91,8 +95,11 @@ fun SettingsScreen() {
                 title = "BACKGROUND PROCESS",
                 subtitle = "Persistent execution",
                 hasSwitch = true,
-                switchState = true,
-                onSwitchChange = {}
+                switchState = backgroundProcessEnabled,
+                onSwitchChange = {
+                    backgroundProcessEnabled = it
+                    Settings.setServiceRunning(context, it)
+                }
             )
 
             Spacer(Modifier.height(32.dp))
@@ -101,8 +108,10 @@ fun SettingsScreen() {
             SettingItem(
                 title = "ENCRYPTION & PRIVACY",
                 subtitle = "Data handling protocol",
-                hasIcon = true,
-                onClick = {}
+                hasChevron = true,
+                onClick = {
+                    // Placeholder for privacy screen
+                }
             )
 
             Spacer(Modifier.height(32.dp))
@@ -111,8 +120,17 @@ fun SettingsScreen() {
             SettingItem(
                 title = "FACTORY RESET",
                 subtitle = "Wipe all module signatures",
-                hasIcon = true,
-                onClick = {}
+                hasChevron = true,
+                onClick = {
+                    // Reset all to defaults
+                    sensitivity = 1.0f
+                    pauseSec = 3
+                    backgroundProcessEnabled = false
+                    
+                    Settings.setCustomVoiceSensitivity(context, 1.0f)
+                    Settings.setCustomPauseSeconds(context, 3)
+                    Settings.setServiceRunning(context, false)
+                }
             )
 
             Spacer(Modifier.height(64.dp))
@@ -149,13 +167,20 @@ fun SettingItem(
     switchState: Boolean = false,
     onSwitchChange: (Boolean) -> Unit = {},
     hasChevron: Boolean = false,
-    hasIcon: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
-    Surface(
-        onClick = { onClick?.invoke() },
-        color = Color.Transparent,
-        enabled = onClick != null
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClick
+                    )
+                } else Modifier
+            )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -163,17 +188,19 @@ fun SettingItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(title, color = TextSecondary, fontSize = 14.sp) // Increased from 12
-                    Text(subtitle, color = TextDisabled, fontSize = 11.sp) // Increased from 10
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, color = TextSecondary, fontSize = 14.sp)
+                    Text(subtitle, color = TextDisabled, fontSize = 11.sp)
                 }
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (status != null) {
                         Text(status, color = PausifyRed, fontSize = 12.sp, letterSpacing = 1.sp)
+                        Spacer(Modifier.width(8.dp))
                     }
                     if (value != null) {
-                        Text(value, color = Color.White, fontSize = 20.sp) // Increased from 18
+                        Text(value, color = Color.White, fontSize = 20.sp)
+                        Spacer(Modifier.width(8.dp))
                     }
                     if (hasSwitch) {
                         Switch(
@@ -181,12 +208,20 @@ fun SettingItem(
                             onCheckedChange = onSwitchChange,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = PausifyRed,
-                                checkedTrackColor = PausifyRed.copy(alpha = 0.3f)
+                                checkedTrackColor = PausifyRed.copy(alpha = 0.3f),
+                                uncheckedThumbColor = TextDisabled,
+                                uncheckedTrackColor = Color.Transparent,
+                                uncheckedBorderColor = TextDisabled
                             )
                         )
                     }
                     if (hasChevron) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextDisabled)
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = TextDisabled,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }

@@ -2,6 +2,7 @@ package com.rohit.voicepause.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -179,33 +180,42 @@ fun ControlCard(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 fun ModeItem(number: String, title: String, subtitle: String, active: Boolean, onClick: () -> Unit) {
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
     ) {
-        Text(
-            number,
-            color = if (active) PausifyRed else TextDisabled,
-            fontSize = 16.sp,
-            modifier = Modifier.width(40.dp)
-        )
-        Column(modifier = Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                title,
-                color = if (active) Color.White else TextSecondary,
-                fontSize = 16.sp
+                number,
+                color = if (active) PausifyRed else TextDisabled,
+                fontSize = 16.sp,
+                modifier = Modifier.width(40.dp)
             )
-            Text(
-                subtitle,
-                color = TextDisabled,
-                fontSize = 11.sp
-            )
-        }
-        if (active) {
-            Box(Modifier.size(6.dp).background(PausifyRed))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    color = if (active) Color.White else TextSecondary,
+                    fontSize = 16.sp
+                )
+                Text(
+                    subtitle,
+                    color = TextDisabled,
+                    fontSize = 11.sp
+                )
+            }
+            if (active) {
+                Box(Modifier.size(6.dp).background(PausifyRed))
+            }
         }
     }
 }

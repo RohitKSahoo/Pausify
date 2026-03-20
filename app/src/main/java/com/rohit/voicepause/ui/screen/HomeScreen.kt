@@ -4,6 +4,7 @@ import android.media.AudioManager
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -119,7 +120,10 @@ fun HomeScreen(
                         Column(
                             modifier = Modifier
                                 .width(IntrinsicSize.Max)
-                                .clickable {
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
                                     selectedProfile = profile
                                     Settings.setSelectedProfile(context, profile)
                                 },
@@ -155,16 +159,25 @@ fun HomeScreen(
             Spacer(Modifier.height(40.dp))
 
             // Listening Card / Toggle
-            Surface(
-                onClick = onToggleService,
-                color = if (serviceActive) PausifyRed else CardBackground,
-                shape = RoundedCornerShape(8.dp),
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp)
+                    .background(
+                        color = if (serviceActive) PausifyRed else CardBackground,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onToggleService
+                    ),
+                contentAlignment = Alignment.Center
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 28.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 28.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {

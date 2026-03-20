@@ -19,7 +19,7 @@ enum class AudioProfile(
 ) {
 
     QUIET(
-        displayName = "Quiet Room",
+        displayName = "Quiet",
         vadAggressiveness = 3,
         minSpeechMs = 100L,
         minVoiceEnergy = 300,
@@ -27,7 +27,7 @@ enum class AudioProfile(
     ),
 
     BUSY(
-        displayName = "Busy Room",
+        displayName = "Busy",
         vadAggressiveness = 2,
         minSpeechMs = 250L,
         minVoiceEnergy = 400,
@@ -35,7 +35,7 @@ enum class AudioProfile(
     ),
 
     TRAFFIC(
-        displayName = "Traffic / Outdoors",
+        displayName = "Outdoors",
         vadAggressiveness = 1,
         minSpeechMs = 700L,
         minVoiceEnergy = 1_000,
