@@ -1,322 +1,225 @@
 package com.rohit.voicepause.ui.screen
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.Build
-import android.util.Log
+import android.media.AudioManager
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.rohit.voicepause.ProfileIntent
+import androidx.compose.ui.unit.sp
 import com.rohit.voicepause.Settings
-import com.rohit.voicepause.VoiceMonitorService
 import com.rohit.voicepause.audio.AudioProfile
+import com.rohit.voicepause.ui.components.PausifyHeader
+import com.rohit.voicepause.ui.components.VolumetricSphere
+import com.rohit.voicepause.ui.theme.*
 import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
-    onStartClick: () -> Unit,
-    onStopClick: () -> Unit
+    isRunning: Boolean,
+    onToggleService: () -> Unit
 ) {
     val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
+    val audioManager = remember { context.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager }
+    
+    var serviceActive by remember { mutableStateOf(isRunning) }
+    var isMusicPlaying by remember { mutableStateOf(false) }
+    var selectedProfile by remember { mutableStateOf(Settings.getSelectedProfile(context)) }
 
-    // ===== STATE =====
-    var isRunning by remember { mutableStateOf(false) }
-    var showStoppedSnackbar by remember { mutableStateOf(false) }
-
-    var selectedProfile by remember {
-        mutableStateOf(Settings.getSelectedProfile(context))
+    LaunchedEffect(isRunning) {
+        serviceActive = isRunning
     }
-
-    // ===== CUSTOM VALUES =====
-
-    var customPauseSec by remember {
-        mutableStateOf(
-            (Settings.getCustomPauseDurationMs(context) / 1000).toFloat()
-        )
-    }
-
-    var customSensitivity by remember {
-        mutableStateOf(Settings.getCustomVoiceSensitivity(context))
-    }
-
-    var customMinSpeech by remember {
-        mutableStateOf(Settings.getCustomMinSpeechMs(context).toFloat())
-    }
-
-    var customMinEnergy by remember {
-        mutableStateOf(Settings.getCustomMinEnergy(context).toFloat())
-    }
-
-    var customVadMode by remember {
-        mutableStateOf(Settings.getCustomVadMode(context).toFloat())
-    }
-
-    // ======================
-    // INIT
-    // ======================
 
     LaunchedEffect(Unit) {
-        Settings.migrate(context)
-        isRunning = Settings.isServiceRunning(context)
-    }
-
-    // ======================
-    // SERVICE RECEIVER
-    // ======================
-
-    DisposableEffect(Unit) {
-
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context?, intent: Intent?) {
-                when (intent?.action) {
-                    VoiceMonitorService.ACTION_SERVICE_STARTED ->
-                        isRunning = true
-
-                    VoiceMonitorService.ACTION_SERVICE_STOPPED -> {
-                        isRunning = false
-                        showStoppedSnackbar = true
-                    }
-                }
+        while (true) {
+            val actualRunning = Settings.isServiceRunning(context)
+            if (serviceActive != actualRunning) {
+                serviceActive = actualRunning
             }
-        }
-
-        val filter = IntentFilter().apply {
-            addAction(VoiceMonitorService.ACTION_SERVICE_STARTED)
-            addAction(VoiceMonitorService.ACTION_SERVICE_STOPPED)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, filter)
-        }
-
-        onDispose { context.unregisterReceiver(receiver) }
-    }
-
-    // ======================
-    // SNACKBAR
-    // ======================
-
-    LaunchedEffect(showStoppedSnackbar) {
-        if (showStoppedSnackbar) {
-            snackbarHostState.showSnackbar("Pausify service stopped")
-            showStoppedSnackbar = false
+            isMusicPlaying = audioManager.isMusicActive
+            delay(200)
         }
     }
 
-    // ======================
-    // UI
-    // ======================
-
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BackgroundDark)
+    ) {
+        PausifyHeader()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(24.dp),
-
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 24.dp)
         ) {
-
-            Text("Pausify", style = MaterialTheme.typography.headlineMedium)
+            Spacer(Modifier.height(32.dp))
 
             Text(
-                if (isRunning) "Status: Listening"
-                else "Status: Stopped"
+                text = if (serviceActive) "Active" else "Inactive",
+                style = MaterialTheme.typography.headlineLarge,
+                color = Color.White,
+                fontSize = 48.sp
             )
 
-            // ======================
-            // PROFILE
-            // ======================
+            Text(
+                text = if (serviceActive) "Monitoring for priority sound\nsignals." 
+                       else "Engine is currently offline.\nTap to start monitoring.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                lineHeight = 24.sp,
+                fontSize = 18.sp
+            )
 
-            Card(Modifier.fillMaxWidth()) {
+            // Reactive Visualizer with 3D Volumetric Sphere (Waveform Removed)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                // The 3D Sphere (Now the sole visualizer here)
+                VolumetricSphere(isActive = serviceActive, isMusicPlaying = isMusicPlaying)
+            }
 
-                Column(Modifier.padding(16.dp)) {
-
-                    Text("Audio Profile",
-                        style = MaterialTheme.typography.titleMedium)
-
-                    Spacer(Modifier.height(8.dp))
-
+            // Sound Environment Profiles Section
+            Column {
+                Text(
+                    "SOUND ENVIRONMENT",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextDisabled,
+                    letterSpacing = 1.5.sp,
+                    fontSize = 12.sp
+                )
+                
+                Spacer(Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
                     AudioProfile.values().forEach { profile ->
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-
-                            RadioButton(
-                                selected = selectedProfile == profile,
-                                onClick = {
-
+                        val isSelected = selectedProfile == profile
+                        Column(
+                            modifier = Modifier
+                                .width(IntrinsicSize.Max) // Ensures column is only as wide as the text
+                                .clickable {
                                     selectedProfile = profile
-
-                                    Log.i(
-                                        "UI_PROFILE",
-                                        "Selected → ${profile.displayName}"
-                                    )
-
                                     Settings.setSelectedProfile(context, profile)
-
-                                    context.sendBroadcast(
-                                        Intent(ProfileIntent.ACTION_PROFILE_CHANGED)
-                                            .putExtra(
-                                                ProfileIntent.EXTRA_PROFILE_NAME,
-                                                profile.name
-                                            )
-                                    )
-                                }
+                                },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                profile.displayName,
+                                color = if (isSelected) Color.White else TextDisabled,
+                                fontSize = 14.sp
                             )
-
-                            Spacer(Modifier.width(8.dp))
-
-                            Text(profile.displayName)
+                            if (isSelected) {
+                                Box(
+                                    Modifier
+                                        .padding(top = 4.dp)
+                                        .fillMaxWidth() // Now covers the whole text width thanks to IntrinsicSize.Max
+                                        .height(2.dp)
+                                        .background(PausifyRed)
+                                )
+                            } else {
+                                // Transparent box to maintain alignment and spacing
+                                Box(
+                                    Modifier
+                                        .padding(top = 4.dp)
+                                        .fillMaxWidth()
+                                        .height(2.dp)
+                                        .background(Color.Transparent)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // ======================
-            // CUSTOM CONTROLS
-            // ======================
+            Spacer(Modifier.height(40.dp))
 
-            if (selectedProfile.isCustom) {
-
-                CustomSlider(
-                    "Pause Duration (sec)",
-                    customPauseSec,
-                    1f..15f,
-                    13
-                ) {
-
-                    customPauseSec = it
-                    Settings.setCustomPauseSeconds(context, it.toInt())
-                }
-
-                CustomSlider(
-                    "Sensitivity",
-                    customSensitivity,
-                    0.8f..1.8f,
-                    4
-                ) {
-
-                    customSensitivity = it
-                    Settings.setCustomVoiceSensitivity(context, it)
-                }
-
-                CustomSlider(
-                    "Min Speech (ms)",
-                    customMinSpeech,
-                    100f..1000f,
-                    9
-                ) {
-
-                    customMinSpeech = it
-                    Settings.setCustomMinSpeechMs(context, it.toLong())
-                }
-
-                CustomSlider(
-                    "Min Energy",
-                    customMinEnergy,
-                    200f..1500f,
-                    13
-                ) {
-
-                    customMinEnergy = it
-                    Settings.setCustomMinEnergy(context, it.toInt())
-                }
-
-                CustomSlider(
-                    "Noise Filter (VAD)",
-                    customVadMode,
-                    0f..3f,
-                    2
-                ) {
-
-                    customVadMode = it
-                    Settings.setCustomVadMode(context, it.toInt())
-                }
-            }
-
-            // ======================
-            // START / STOP
-            // ======================
-
-            Button(
-                onClick = onStartClick,
-                enabled = !isRunning,
-                modifier = Modifier.fillMaxWidth()
+            // Listening Card / Toggle with Sharper Corners
+            Surface(
+                onClick = onToggleService,
+                color = if (serviceActive) PausifyRed else CardBackground,
+                shape = RoundedCornerShape(8.dp), // Sharper corners
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
             ) {
-                Text("Start")
+                Row(
+                    modifier = Modifier.padding(horizontal = 28.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            "LISTENING",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (serviceActive) Color.White else TextSecondary,
+                            letterSpacing = 1.sp,
+                            fontSize = 20.sp
+                        )
+                        Text(
+                            "SIGNALS ALERT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (serviceActive) Color.White.copy(alpha = 0.8f) else TextDisabled,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                "STATUS",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (serviceActive) Color.White.copy(alpha = 0.8f) else TextDisabled,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                if (serviceActive) "ACTIVE" else "STOPPED",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (serviceActive) Color.White else TextSecondary,
+                                fontSize = 16.sp
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    if (serviceActive) Color.White.copy(alpha = 0.2f) else BackgroundDark,
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.FiberManualRecord,
+                                contentDescription = null,
+                                tint = if (serviceActive) Color.White else TextDisabled,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
             }
 
-            OutlinedButton(
-                onClick = onStopClick,
-                enabled = isRunning,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Stop")
-            }
-        }
-    }
-
-    // ======================
-    // SAFETY RESYNC
-    // ======================
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(500)
-            isRunning = Settings.isServiceRunning(context)
-        }
-    }
-}
-
-// ======================
-// SLIDER COMPONENT
-// ======================
-
-@Composable
-private fun CustomSlider(
-    title: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    onChange: (Float) -> Unit
-) {
-
-    Card(Modifier.fillMaxWidth()) {
-
-        Column(Modifier.padding(16.dp)) {
-
-            Text(title, style = MaterialTheme.typography.titleMedium)
-
-            Spacer(Modifier.height(6.dp))
-
-            Slider(
-                value = value,
-                onValueChange = onChange,
-                valueRange = range,
-                steps = steps
-            )
-
-            Text(
-                "Value: ${value.toInt()}",
-                style = MaterialTheme.typography.bodySmall
-            )
+            Spacer(Modifier.height(100.dp))
         }
     }
 }

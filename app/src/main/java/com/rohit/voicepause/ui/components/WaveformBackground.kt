@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.rohit.voicepause.ui.theme.*
@@ -53,10 +54,9 @@ fun AnimatedWaveformBackground(
             path = path,
             brush = Brush.horizontalGradient(
                 listOf(
-                    NeonGreen,
-                    NeonTeal,
-                    NeonBlue,
-                    NeonIndigo
+                    PausifyRed.copy(alpha = 0.5f),
+                    PausifyRed,
+                    PausifyRed.copy(alpha = 0.5f)
                 )
             ),
             style = Stroke(width = 6f)

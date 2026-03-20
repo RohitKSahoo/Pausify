@@ -8,23 +8,28 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.rohit.voicepause.audio.AudioProfile
 import com.rohit.voicepause.audio.VadProcessor
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
 
     companion object {
         private const val TAG = "VoicePause/Service"
 
-        const val ACTION_SERVICE_STARTED =
-            "com.rohit.voicepause.ACTION_SERVICE_STARTED"
-        const val ACTION_SERVICE_STOPPED =
-            "com.rohit.voicepause.ACTION_SERVICE_STOPPED"
-
-        private const val ACTION_STOP_SERVICE =
-            "com.rohit.voicepause.ACTION_STOP_SERVICE"
+        const val ACTION_SERVICE_STARTED = "com.rohit.voicepause.ACTION_SERVICE_STARTED"
+        const val ACTION_SERVICE_STOPPED = "com.rohit.voicepause.ACTION_SERVICE_STOPPED"
+        private const val ACTION_STOP_SERVICE = "com.rohit.voicepause.ACTION_STOP_SERVICE"
 
         private const val NOTIFICATION_ID = 100
         private const val AUTO_STOP_TIMEOUT_MS = 60_000L
         private const val MONITOR_INTERVAL_MS = 1_000L
+
+        private val _isRunningFlow = MutableStateFlow(false)
+        val isRunningFlow = _isRunningFlow.asStateFlow()
+        
+        fun updateRunningState(isRunning: Boolean) {
+            _isRunningFlow.value = isRunning
+        }
     }
 
     private var userVoiceLocked = false
@@ -69,10 +74,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
         currentProfile = Settings.getSelectedProfile(applicationContext)
         applyProfileParams()
 
-        Log.i(
-            TAG,
-            "[SERVICE CREATED] profile=${currentProfile.displayName}, pauseHoldMs=$pauseHoldMs"
-        )
+        Log.i(TAG, "[SERVICE CREATED] profile=${currentProfile.displayName}, pauseHoldMs=$pauseHoldMs")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -82,6 +84,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
             return START_NOT_STICKY
         }
 
+        updateRunningState(true)
         Settings.setServiceRunning(applicationContext, true)
         sendBroadcast(Intent(ACTION_SERVICE_STARTED))
 
@@ -102,6 +105,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     override fun onDestroy() {
         Log.i(TAG, "[SERVICE DESTROYED]")
 
+        updateRunningState(false)
         handler.removeCallbacksAndMessages(null)
         vadProcessor.release()
         abandonAudioFocus()
@@ -125,17 +129,11 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
                 currentProfile.pauseHoldMs
             }
 
-        Log.i(
-            TAG,
-            "[PROFILE APPLIED] ${currentProfile.displayName} → pauseHoldMs=$pauseHoldMs"
-        )
+        Log.i(TAG, "[PROFILE APPLIED] ${currentProfile.displayName} → pauseHoldMs=$pauseHoldMs")
     }
 
     private fun reloadProfileLive(newProfile: AudioProfile) {
-        Log.i(
-            TAG,
-            "[PROFILE HOT-RELOAD] ${currentProfile.displayName} → ${newProfile.displayName}"
-        )
+        Log.i(TAG, "[PROFILE HOT-RELOAD] ${currentProfile.displayName} → ${newProfile.displayName}")
 
         currentProfile = newProfile
         applyProfileParams()
@@ -170,7 +168,6 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
             return
         }
 
-        // Apply custom params immediately if needed
         applyCustomControlsIfNeeded()
     }
 
@@ -178,17 +175,10 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
 
         if (!currentProfile.isCustom) return
 
-        val minSpeech =
-            Settings.getCustomMinSpeechMs(applicationContext)
-
-        val minEnergy =
-            Settings.getCustomMinEnergy(applicationContext)
-
-        val vadMode =
-            Settings.getCustomVadMode(applicationContext)
-
-        val sensitivity =
-            Settings.getCustomVoiceSensitivity(applicationContext)
+        val minSpeech = Settings.getCustomMinSpeechMs(applicationContext)
+        val minEnergy = Settings.getCustomMinEnergy(applicationContext)
+        val vadMode = Settings.getCustomVadMode(applicationContext)
+        val sensitivity = Settings.getCustomVoiceSensitivity(applicationContext)
 
         vadProcessor.applyCustomProfile(
             minSpeech = minSpeech,
@@ -197,10 +187,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
             sensitivity = sensitivity
         )
 
-        Log.i(
-            TAG,
-            "[CUSTOM APPLIED] speech=$minSpeech energy=$minEnergy vad=$vadMode sens=$sensitivity"
-        )
+        Log.i(TAG, "[CUSTOM APPLIED] speech=$minSpeech energy=$minEnergy vad=$vadMode sens=$sensitivity")
     }
 
 
@@ -211,9 +198,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     private val musicMonitorLoop = object : Runnable {
         override fun run() {
 
-            // 🔥 AUTHORITATIVE PROFILE CHECK
-            val selectedProfile =
-                Settings.getSelectedProfile(applicationContext)
+            val selectedProfile = Settings.getSelectedProfile(applicationContext)
 
             if (selectedProfile != currentProfile) {
                 reloadProfileLive(selectedProfile)
@@ -316,26 +301,14 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     // VAD CALLBACKS
     // ======================
 
-    override fun onSpeechDetected(
-        rms: Int,
-        isNear: Boolean
-    ) {
+    override fun onSpeechDetected(rms: Int, isNear: Boolean) {
 
         val base = currentProfile.minVoiceEnergy
         val ambientLimit = (base * AMBIENT_FACTOR).toInt()
 
-        Log.i(
-            TAG,
-            "[VAD] Voice → rms=$rms near=$isNear locked=$userVoiceLocked " +
-                    "ambientLimit=$ambientLimit"
-        )
+        Log.i(TAG, "[VAD] Voice → rms=$rms near=$isNear locked=$userVoiceLocked ambientLimit=$ambientLimit")
 
-        // ========================
-        // MUSIC PLAYING (STRICT)
-        // ========================
         if (!pausedByVoice) {
-
-            // Only user voice allowed
             if (!isNear) {
                 Log.d(TAG, "[VAD] Ignored distant voice")
                 return
@@ -343,21 +316,13 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
 
             userVoiceLocked = true
             pauseMusic()
-        }
-
-        // ========================
-        // MUSIC PAUSED (RELAXED)
-        // ========================
-        else {
-
-            // Allow nearby voices
+        } else {
             if (rms < ambientLimit) {
                 Log.d(TAG, "[VAD] Ambient too weak → ignored")
                 return
             }
         }
 
-        // Extend pause
         scheduleResume()
     }
 
@@ -376,6 +341,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     private fun stopServiceCompletely(reason: String) {
         Log.i(TAG, "[SERVICE STOP] reason=$reason")
 
+        updateRunningState(false)
         handler.removeCallbacksAndMessages(null)
         vadProcessor.stop()
         abandonAudioFocus()
