@@ -151,9 +151,9 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
         vadProcessor = VadProcessor()
         initializeVad()
 
+        applyCustomControlsIfNeeded()
         if (audioManager.isMusicActive || pausedByVoice) {
             vadProcessor.start()
-            applyCustomControlsIfNeeded()
         }
 
         Log.i(TAG, "[PROFILE HOT-RELOAD COMPLETE]")
@@ -164,21 +164,45 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
     // ======================
 
     private fun initializeVad() {
+
         if (!vadProcessor.initialize(this, currentProfile)) {
             stopServiceCompletely("VAD init failed")
+            return
         }
+
+        // Apply custom params immediately if needed
+        applyCustomControlsIfNeeded()
     }
 
     private fun applyCustomControlsIfNeeded() {
+
         if (!currentProfile.isCustom) return
+
+        val minSpeech =
+            Settings.getCustomMinSpeechMs(applicationContext)
+
+        val minEnergy =
+            Settings.getCustomMinEnergy(applicationContext)
+
+        val vadMode =
+            Settings.getCustomVadMode(applicationContext)
 
         val sensitivity =
             Settings.getCustomVoiceSensitivity(applicationContext)
 
-        vadProcessor.applyUserSensitivity(sensitivity)
+        vadProcessor.applyCustomProfile(
+            minSpeech = minSpeech,
+            minEnergy = minEnergy,
+            vadMode = vadMode,
+            sensitivity = sensitivity
+        )
 
-        Log.i(TAG, "[CUSTOM SETTINGS] sensitivity=$sensitivity")
+        Log.i(
+            TAG,
+            "[CUSTOM APPLIED] speech=$minSpeech energy=$minEnergy vad=$vadMode sens=$sensitivity"
+        )
     }
+
 
     // ======================
     // MUSIC MONITOR LOOP

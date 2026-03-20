@@ -11,17 +11,11 @@ class VadProcessor :
     companion object {
         private const val TAG = "VadProcessor"
 
-        // Near-field detection multiplier
         private const val NEAR_FACTOR = 1.6f
-        private var lastRms = 0
-
     }
 
     interface VadProcessorListener {
 
-        /**
-         * @param isNear true = likely user voice (close to mic)
-         */
         fun onSpeechDetected(rms: Int, isNear: Boolean)
 
         fun onVadError(error: String)
@@ -31,8 +25,8 @@ class VadProcessor :
     private val audioCapture = AudioCapture()
     private lateinit var speechStateMachine: SpeechStateMachine
 
-    // ===== PROFILE PARAMETERS =====
-    private var baseMinSpeechMs = 400L
+    // ===== ACTIVE PARAMETERS =====
+    private var minSpeechMs = 400L
     private var minVoiceEnergy = 300
     private var vadAggressiveness = 2
 
@@ -40,8 +34,13 @@ class VadProcessor :
     private val isRunning = AtomicBoolean(false)
     private var listener: VadProcessorListener? = null
 
-    // Last detected near-voice state
+    private var lastRms = 0
     private var lastIsNear = false
+
+
+    // ======================
+    // INIT
+    // ======================
 
     fun initialize(
         listener: VadProcessorListener,
@@ -51,129 +50,135 @@ class VadProcessor :
         this.listener = listener
 
         if (!vadWrapper.initialize(AudioCapture.SAMPLE_RATE)) {
-            listener.onVadError("VAD initialization failed")
+            listener.onVadError("VAD init failed")
             return false
         }
 
-        // Apply profile parameters (CUSTOM handled elsewhere)
         if (!profile.isCustom) {
-            vadAggressiveness = profile.vadAggressiveness
-            baseMinSpeechMs = profile.minSpeechMs
+
+            minSpeechMs = profile.minSpeechMs
             minVoiceEnergy = profile.minVoiceEnergy
+            vadAggressiveness = profile.vadAggressiveness
         }
 
-        speechStateMachine = SpeechStateMachine(vadWrapper, this).apply {
-            configure(minSpeechMs = baseMinSpeechMs)
-        }
+        speechStateMachine = SpeechStateMachine(vadWrapper, this)
+        speechStateMachine.configure(minSpeechMs)
 
         if (!audioCapture.initialize(this)) {
-            listener.onVadError("AudioCapture initialization failed")
+            listener.onVadError("AudioCapture init failed")
             return false
         }
 
         Log.i(
             TAG,
-            "[PROFILE APPLIED] ${profile.displayName} → " +
-                    "vad=$vadAggressiveness, " +
-                    "minSpeech=$baseMinSpeechMs, " +
-                    "minEnergy=$minVoiceEnergy"
+            "Profile=${profile.displayName} " +
+                    "speech=$minSpeechMs energy=$minVoiceEnergy vad=$vadAggressiveness"
         )
 
         return true
     }
 
+
+    // ======================
+    // CUSTOM APPLY
+    // ======================
+
+    fun applyCustomProfile(
+        minSpeech: Long,
+        minEnergy: Int,
+        vadMode: Int,
+        sensitivity: Float
+    ) {
+
+        minSpeechMs = (minSpeech / sensitivity)
+            .toLong()
+            .coerceAtLeast(100)
+
+        minVoiceEnergy = minEnergy
+        vadAggressiveness = vadMode
+
+        if (::speechStateMachine.isInitialized) {
+            speechStateMachine.configure(minSpeechMs)
+        }
+
+        Log.i(
+            TAG,
+            "[CUSTOM APPLIED] speech=$minSpeechMs energy=$minVoiceEnergy vad=$vadAggressiveness"
+        )
+    }
+
+
+    // ======================
+    // CONTROL
+    // ======================
+
     fun start(): Boolean {
 
         if (!audioCapture.startCapture()) {
-            listener?.onVadError("Failed to start audio capture")
+            listener?.onVadError("Start capture failed")
             return false
         }
 
         isRunning.set(true)
 
         speechStateMachine.reset()
-        speechStateMachine.configure(minSpeechMs = baseMinSpeechMs)
+        speechStateMachine.configure(minSpeechMs)
 
-        Log.i(TAG, "[VAD] Started")
+        Log.i(TAG, "Started")
         return true
     }
 
     fun stop() {
+
         isRunning.set(false)
+
         audioCapture.stopCapture()
         speechStateMachine.reset()
 
-        Log.i(TAG, "[VAD] Stopped")
+        Log.i(TAG, "Stopped")
     }
 
     fun release() {
+
         stop()
+
         audioCapture.release()
         vadWrapper.destroy()
+
         listener = null
     }
 
     fun isRunning(): Boolean = isRunning.get()
 
-    /**
-     * CUSTOM profile only
-     */
-    fun applyUserSensitivity(multiplier: Float) {
-
-        if (!::speechStateMachine.isInitialized) return
-
-        val safeMultiplier = multiplier.coerceIn(0.8f, 1.8f)
-
-        val effectiveMinSpeech =
-            (baseMinSpeechMs / safeMultiplier)
-                .toLong()
-                .coerceAtLeast(200L)
-
-        speechStateMachine.configure(minSpeechMs = effectiveMinSpeech)
-
-        Log.i(
-            TAG,
-            "[CUSTOM] Sensitivity → minSpeechMs=$effectiveMinSpeech"
-        )
-    }
 
     // ======================
     // AUDIO CALLBACK
     // ======================
 
-    override fun onAudioFrame(audioFrame: ShortArray, timestamp: Long) {
+    override fun onAudioFrame(
+        audioFrame: ShortArray,
+        timestamp: Long
+    ) {
 
         val rms = calculateRms(audioFrame)
         lastRms = rms
 
+        if (rms < minVoiceEnergy) return
 
-        // Energy gate
-        if (rms < minVoiceEnergy) {
-            Log.d(
-                TAG,
-                "[VOICE REJECTED] RMS=$rms < threshold=$minVoiceEnergy"
-            )
-            return
-        }
-
-        // Near-field detection
-        val nearThreshold = minVoiceEnergy * NEAR_FACTOR
-        val isNear = rms >= nearThreshold
+        val nearLimit = minVoiceEnergy * NEAR_FACTOR
+        val isNear = rms >= nearLimit
 
         lastIsNear = isNear
-
-        Log.d(
-            TAG,
-            "[VOICE OK] RMS=$rms, near=$isNear (limit=$nearThreshold)"
-        )
 
         speechStateMachine.processFrame(audioFrame, timestamp)
     }
 
     override fun onCaptureError(error: String) {
+
         listener?.onVadError(error)
         stop()
     }
+
 
     // ======================
     // SPEECH CALLBACK
@@ -181,26 +186,17 @@ class VadProcessor :
 
     override fun onSpeechStarted() {
 
-        Log.i(
-            TAG,
-            "[VAD] Speech confirmed → near=$lastIsNear"
-        )
-
         listener?.onSpeechDetected(lastRms, lastIsNear)
-
     }
 
     override fun onSpeechActive() {
-        // Forward continuous speech
+
         listener?.onSpeechDetected(lastRms, lastIsNear)
     }
 
     override fun onSpeechEnded() {
 
-        Log.i(TAG, "[VAD] Speech ended")
-
-        // No direct action needed yet
-        // Pause logic is handled by service timers
+        Log.d(TAG, "Speech ended")
     }
 
 

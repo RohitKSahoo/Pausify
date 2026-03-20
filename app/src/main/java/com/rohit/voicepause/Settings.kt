@@ -15,12 +15,18 @@ object Settings {
     private const val KEY_SELECTED_PROFILE = "selected_audio_profile"
 
     // ===== CUSTOM PROFILE KEYS =====
-    private const val KEY_CUSTOM_SILENCE_DURATION = "custom_silence_duration_sec"
-    private const val KEY_CUSTOM_VOICE_SENSITIVITY = "custom_voice_sensitivity"
+    private const val KEY_CUSTOM_PAUSE_SEC = "custom_pause_sec"
+    private const val KEY_CUSTOM_SENSITIVITY = "custom_voice_sensitivity"
+    private const val KEY_CUSTOM_MIN_SPEECH = "custom_min_speech_ms"
+    private const val KEY_CUSTOM_MIN_ENERGY = "custom_min_energy"
+    private const val KEY_CUSTOM_VAD_MODE = "custom_vad_mode"
 
-    // ===== DEFAULTS =====
-    private const val DEFAULT_CUSTOM_SILENCE_DURATION = 2      // seconds
-    private const val DEFAULT_CUSTOM_VOICE_SENSITIVITY = 1.0f // multiplier
+    // ===== DEFAULTS (Safe) =====
+    private const val DEFAULT_CUSTOM_PAUSE_SEC = 3
+    private const val DEFAULT_CUSTOM_SENSITIVITY = 1.0f
+    private const val DEFAULT_CUSTOM_MIN_SPEECH = 250L
+    private const val DEFAULT_CUSTOM_MIN_ENERGY = 400
+    private const val DEFAULT_CUSTOM_VAD_MODE = 2
 
     // ===== PREF ACCESS =====
     private fun prefs(context: Context): SharedPreferences =
@@ -56,9 +62,8 @@ object Settings {
     // SERVICE STATE
     // ======================
 
-    fun isServiceRunning(context: Context): Boolean {
-        return prefs(context).getBoolean(KEY_SERVICE_RUNNING, false)
-    }
+    fun isServiceRunning(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SERVICE_RUNNING, false)
 
     fun setServiceRunning(context: Context, running: Boolean) {
         prefs(context).edit()
@@ -69,72 +74,106 @@ object Settings {
     }
 
     // ======================
-    // CUSTOM PROFILE — PAUSE DURATION
+    // CUSTOM: PAUSE
     // ======================
 
     fun getCustomPauseDurationMs(context: Context): Long {
-        val seconds = prefs(context).getInt(
-            KEY_CUSTOM_SILENCE_DURATION,
-            DEFAULT_CUSTOM_SILENCE_DURATION
+        val sec = prefs(context).getInt(
+            KEY_CUSTOM_PAUSE_SEC,
+            DEFAULT_CUSTOM_PAUSE_SEC
         )
 
-        val ms = seconds * 1000L
+        val ms = sec * 1000L
 
-        Log.i(
-            TAG,
-            "[CUSTOM] Pause duration → ${ms}ms ($seconds sec)"
-        )
-
+        Log.i(TAG, "[CUSTOM] pause=$ms ms")
         return ms
     }
 
-    fun setCustomSilenceDurationSeconds(context: Context, seconds: Int) {
+    fun setCustomPauseSeconds(context: Context, sec: Int) {
         prefs(context).edit()
-            .putInt(KEY_CUSTOM_SILENCE_DURATION, seconds)
+            .putInt(KEY_CUSTOM_PAUSE_SEC, sec)
             .apply()
 
-        Log.i(
-            TAG,
-            "[CUSTOM] Pause duration set → ${seconds}s"
-        )
+        Log.i(TAG, "[CUSTOM] pause set=$sec s")
     }
 
     // ======================
-    // CUSTOM PROFILE — VOICE SENSITIVITY
+    // CUSTOM: SENSITIVITY
     // ======================
 
-    fun getCustomVoiceSensitivity(context: Context): Float {
-        val value = prefs(context).getFloat(
-            KEY_CUSTOM_VOICE_SENSITIVITY,
-            DEFAULT_CUSTOM_VOICE_SENSITIVITY
+    fun getCustomVoiceSensitivity(context: Context): Float =
+        prefs(context).getFloat(
+            KEY_CUSTOM_SENSITIVITY,
+            DEFAULT_CUSTOM_SENSITIVITY
         )
-
-        Log.i(
-            TAG,
-            "[CUSTOM] Voice sensitivity → $value"
-        )
-
-        return value
-    }
 
     fun setCustomVoiceSensitivity(context: Context, value: Float) {
         prefs(context).edit()
-            .putFloat(KEY_CUSTOM_VOICE_SENSITIVITY, value)
+            .putFloat(KEY_CUSTOM_SENSITIVITY, value)
             .apply()
 
-        Log.i(
-            TAG,
-            "[CUSTOM] Voice sensitivity set → $value"
-        )
+        Log.i(TAG, "[CUSTOM] sensitivity=$value")
     }
 
     // ======================
-    // MIGRATION (FUTURE)
+    // CUSTOM: MIN SPEECH
+    // ======================
+
+    fun getCustomMinSpeechMs(context: Context): Long =
+        prefs(context).getLong(
+            KEY_CUSTOM_MIN_SPEECH,
+            DEFAULT_CUSTOM_MIN_SPEECH
+        )
+
+    fun setCustomMinSpeechMs(context: Context, ms: Long) {
+        prefs(context).edit()
+            .putLong(KEY_CUSTOM_MIN_SPEECH, ms)
+            .apply()
+
+        Log.i(TAG, "[CUSTOM] minSpeech=$ms")
+    }
+
+    // ======================
+    // CUSTOM: ENERGY
+    // ======================
+
+    fun getCustomMinEnergy(context: Context): Int =
+        prefs(context).getInt(
+            KEY_CUSTOM_MIN_ENERGY,
+            DEFAULT_CUSTOM_MIN_ENERGY
+        )
+
+    fun setCustomMinEnergy(context: Context, energy: Int) {
+        prefs(context).edit()
+            .putInt(KEY_CUSTOM_MIN_ENERGY, energy)
+            .apply()
+
+        Log.i(TAG, "[CUSTOM] minEnergy=$energy")
+    }
+
+    // ======================
+    // CUSTOM: VAD MODE
+    // ======================
+
+    fun getCustomVadMode(context: Context): Int =
+        prefs(context).getInt(
+            KEY_CUSTOM_VAD_MODE,
+            DEFAULT_CUSTOM_VAD_MODE
+        )
+
+    fun setCustomVadMode(context: Context, mode: Int) {
+        prefs(context).edit()
+            .putInt(KEY_CUSTOM_VAD_MODE, mode)
+            .apply()
+
+        Log.i(TAG, "[CUSTOM] vadMode=$mode")
+    }
+
+    // ======================
+    // MIGRATION
     // ======================
 
     fun migrate(context: Context) {
-        // No-op for now
-        // Reserved for future schema changes
-        Log.i(TAG, "[MIGRATION] No action needed")
+        Log.i(TAG, "[MIGRATION] No-op")
     }
 }
