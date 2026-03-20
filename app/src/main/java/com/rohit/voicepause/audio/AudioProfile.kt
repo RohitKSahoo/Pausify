@@ -29,7 +29,7 @@ enum class AudioProfile(
     BUSY(
         displayName = "Busy",
         vadAggressiveness = 2,
-        minSpeechMs = 250L,
+        minSpeechMs = 450L,
         minVoiceEnergy = 400,
         pauseHoldMs = 5_000L
     ),

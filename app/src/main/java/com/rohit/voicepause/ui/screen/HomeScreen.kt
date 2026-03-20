@@ -1,8 +1,10 @@
 package com.rohit.voicepause.ui.screen
 
 import android.media.AudioManager
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -18,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rohit.voicepause.Settings
@@ -40,6 +44,10 @@ fun HomeScreen(
     var isMusicPlaying by remember { mutableStateOf(false) }
     var selectedProfile by remember { mutableStateOf(Settings.getSelectedProfile(context)) }
 
+    // Timer state
+    var startTime by remember { mutableLongStateOf(0L) }
+    var currentTime by remember { mutableLongStateOf(0L) }
+
     LaunchedEffect(isRunning) {
         serviceActive = isRunning
     }
@@ -55,6 +63,23 @@ fun HomeScreen(
         }
     }
 
+    // Timer logic
+    LaunchedEffect(serviceActive) {
+        if (serviceActive) {
+            startTime = System.currentTimeMillis()
+            while (serviceActive) {
+                currentTime = System.currentTimeMillis()
+                delay(1000)
+            }
+        } else {
+            startTime = 0L
+            currentTime = 0L
+        }
+    }
+
+    val elapsedSeconds = if (startTime > 0) (currentTime - startTime) / 1000 else 0L
+    val timerText = String.format("%02d:%02d:%02d", elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -66,28 +91,31 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
+                .animateContentSize() // Smoothly animate layout shifts
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(0.dp))
 
             // Animated Status Text
             ScrambledText(
-                text = if (serviceActive) "Active" else "Inactive",
+                text = if (serviceActive) "ACTIVE" else "INACTIVE",
                 style = MaterialTheme.typography.headlineLarge,
                 color = Color.White,
                 fontSize = 48.sp,
                 durationMillis = 1000
             )
 
+            Spacer(Modifier.height(10.dp))
+
             Text(
-                text = if (serviceActive) "Monitoring for priority sound\nsignals." 
-                       else "Engine is currently offline.\nTap to start monitoring.",
+                text = if (serviceActive) "Monitoring." 
+                       else "Engine standby.\nTap to engage.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
                 lineHeight = 24.sp,
                 fontSize = 18.sp
             )
 
-            // Reactive Visualizer with 3D Volumetric Sphere (Gradual transition handled inside)
+            // Reactive Visualizer with 3D Volumetric Sphere
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -104,7 +132,7 @@ fun HomeScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = TextDisabled,
                     letterSpacing = 1.5.sp,
-                    fontSize = 12.sp
+                    fontSize = 14.sp
                 )
                 
                 Spacer(Modifier.height(16.dp))
@@ -115,7 +143,8 @@ fun HomeScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    AudioProfile.values().forEach { profile ->
+                    // Filter out CUSTOM profile
+                    AudioProfile.values().filter { !it.isCustom }.forEach { profile ->
                         val isSelected = selectedProfile == profile
                         Column(
                             modifier = Modifier
@@ -132,7 +161,8 @@ fun HomeScreen(
                             Text(
                                 profile.displayName,
                                 color = if (isSelected) Color.White else TextDisabled,
-                                fontSize = 14.sp
+                                fontSize = 16.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                             if (isSelected) {
                                 Box(
@@ -156,13 +186,13 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(20.dp))
 
             // Listening Card / Toggle
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp)
+                    .height(110.dp) // Reset height
                     .background(
                         color = if (serviceActive) PausifyRed else CardBackground,
                         shape = RoundedCornerShape(8.dp)
@@ -229,6 +259,46 @@ fun HomeScreen(
                                 contentDescription = null,
                                 tint = if (serviceActive) Color.White else TextDisabled,
                                 modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Session Timer Component with Smooth Slide Down animation
+            AnimatedVisibility(
+                visible = serviceActive,
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+            ) {
+                Column {
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "SESSION TIME",
+                            color = TextDisabled,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.width(12.dp))
+
+                        // Outlined Timer Box (Red border, no background)
+                        Box(
+                            modifier = Modifier
+                                .border(1.dp, PausifyRed, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 40.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = timerText,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
