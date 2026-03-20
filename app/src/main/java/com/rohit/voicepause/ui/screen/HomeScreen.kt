@@ -2,7 +2,7 @@ package com.rohit.voicepause.ui.screen
 
 import android.media.AudioManager
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +31,7 @@ import com.rohit.voicepause.ui.components.ScrambledText
 import com.rohit.voicepause.ui.components.VolumetricSphere
 import com.rohit.voicepause.ui.theme.*
 import kotlinx.coroutines.delay
+import java.util.Locale
 
 @Composable
 fun HomeScreen(
@@ -63,7 +64,7 @@ fun HomeScreen(
         }
     }
 
-    // Timer logic
+    // Timer logic: We don't reset to 0 immediately on stop so the exit animation shows the final time
     LaunchedEffect(serviceActive) {
         if (serviceActive) {
             startTime = System.currentTimeMillis()
@@ -71,14 +72,13 @@ fun HomeScreen(
                 currentTime = System.currentTimeMillis()
                 delay(1000)
             }
-        } else {
-            startTime = 0L
-            currentTime = 0L
         }
+        // When stopped, we keep startTime and currentTime as they are 
+        // so the exit animation doesn't "blink" back to 00:00:00
     }
 
     val elapsedSeconds = if (startTime > 0) (currentTime - startTime) / 1000 else 0L
-    val timerText = String.format("%02d:%02d:%02d", elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60)
+    val timerText = String.format(Locale.getDefault(), "%02d:%02d:%02d", elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60)
 
     Column(
         modifier = Modifier
@@ -91,7 +91,6 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
-                .animateContentSize() // Smoothly animate layout shifts
         ) {
             Spacer(Modifier.height(0.dp))
 
@@ -101,19 +100,22 @@ fun HomeScreen(
                 style = MaterialTheme.typography.headlineLarge,
                 color = Color.White,
                 fontSize = 48.sp,
-                durationMillis = 1000
+                durationMillis = 600
             )
 
             Spacer(Modifier.height(10.dp))
 
-            Text(
-                text = if (serviceActive) "Monitoring." 
-                       else "Engine standby.\nTap to engage.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                lineHeight = 24.sp,
-                fontSize = 18.sp
-            )
+            // Fixed height for status message to prevent visualizer/card shift
+            Box(modifier = Modifier.height(56.dp)) {
+                Text(
+                    text = if (serviceActive) "Monitoring." 
+                           else "Engine standby.\nTap to engage.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    lineHeight = 24.sp,
+                    fontSize = 18.sp
+                )
+            }
 
             // Reactive Visualizer with 3D Volumetric Sphere
             Box(
@@ -144,7 +146,7 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     // Filter out CUSTOM profile
-                    AudioProfile.values().filter { !it.isCustom }.forEach { profile ->
+                    AudioProfile.entries.filter { !it.isCustom }.forEach { profile ->
                         val isSelected = selectedProfile == profile
                         Column(
                             modifier = Modifier
@@ -192,7 +194,7 @@ fun HomeScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp) // Reset height
+                    .height(110.dp)
                     .background(
                         color = if (serviceActive) PausifyRed else CardBackground,
                         shape = RoundedCornerShape(8.dp)
@@ -265,47 +267,50 @@ fun HomeScreen(
                 }
             }
 
-            // Session Timer Component with Smooth Slide Down animation
-            AnimatedVisibility(
-                visible = serviceActive,
-                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+            // Fixed height container for Timer and bottom spacing to prevent layout shifts
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
             ) {
-                Column {
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "SESSION TIME",
-                            color = TextDisabled,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.width(12.dp))
-
-                        // Outlined Timer Box (Red border, no background)
-                        Box(
-                            modifier = Modifier
-                                .border(1.dp, PausifyRed, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 40.dp, vertical = 4.dp)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = serviceActive,
+                    enter = expandVertically(animationSpec = tween(600), expandFrom = Alignment.Top) + fadeIn(animationSpec = tween(600)),
+                    exit = shrinkVertically(animationSpec = tween(600), shrinkTowards = Alignment.Top) + fadeOut(animationSpec = tween(600))
+                ) {
+                    Column {
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = timerText,
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontFamily = FontFamily.Monospace,
+                                text = "SESSION TIME",
+                                color = TextDisabled,
+                                fontSize = 10.sp,
+                                letterSpacing = 1.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                            Spacer(Modifier.width(12.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .border(1.dp, PausifyRed, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = timerText,
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
             }
-
-            Spacer(Modifier.height(100.dp))
         }
     }
 }
