@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.rohit.voicepause.Settings
 import com.rohit.voicepause.audio.AudioProfile
 import com.rohit.voicepause.ui.components.PausifyHeader
+import com.rohit.voicepause.ui.components.ScrambledText
 import com.rohit.voicepause.ui.components.VolumetricSphere
 import com.rohit.voicepause.ui.theme.*
 import kotlinx.coroutines.delay
@@ -67,11 +68,13 @@ fun HomeScreen(
         ) {
             Spacer(Modifier.height(32.dp))
 
-            Text(
+            // Animated Status Text
+            ScrambledText(
                 text = if (serviceActive) "Active" else "Inactive",
                 style = MaterialTheme.typography.headlineLarge,
                 color = Color.White,
-                fontSize = 48.sp
+                fontSize = 48.sp,
+                durationMillis = 1000
             )
 
             Text(
@@ -83,14 +86,13 @@ fun HomeScreen(
                 fontSize = 18.sp
             )
 
-            // Reactive Visualizer with 3D Volumetric Sphere (Waveform Removed)
+            // Reactive Visualizer with 3D Volumetric Sphere (Gradual transition handled inside)
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                // The 3D Sphere (Now the sole visualizer here)
                 VolumetricSphere(isActive = serviceActive, isMusicPlaying = isMusicPlaying)
             }
 
@@ -116,7 +118,7 @@ fun HomeScreen(
                         val isSelected = selectedProfile == profile
                         Column(
                             modifier = Modifier
-                                .width(IntrinsicSize.Max) // Ensures column is only as wide as the text
+                                .width(IntrinsicSize.Max)
                                 .clickable {
                                     selectedProfile = profile
                                     Settings.setSelectedProfile(context, profile)
@@ -132,12 +134,11 @@ fun HomeScreen(
                                 Box(
                                     Modifier
                                         .padding(top = 4.dp)
-                                        .fillMaxWidth() // Now covers the whole text width thanks to IntrinsicSize.Max
+                                        .fillMaxWidth()
                                         .height(2.dp)
                                         .background(PausifyRed)
                                 )
                             } else {
-                                // Transparent box to maintain alignment and spacing
                                 Box(
                                     Modifier
                                         .padding(top = 4.dp)
@@ -153,11 +154,11 @@ fun HomeScreen(
 
             Spacer(Modifier.height(40.dp))
 
-            // Listening Card / Toggle with Sharper Corners
+            // Listening Card / Toggle
             Surface(
                 onClick = onToggleService,
                 color = if (serviceActive) PausifyRed else CardBackground,
-                shape = RoundedCornerShape(8.dp), // Sharper corners
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp)
@@ -191,11 +192,13 @@ fun HomeScreen(
                                 color = if (serviceActive) Color.White.copy(alpha = 0.8f) else TextDisabled,
                                 fontSize = 12.sp
                             )
-                            Text(
-                                if (serviceActive) "ACTIVE" else "STOPPED",
+                            // Animated Status Subtext
+                            ScrambledText(
+                                text = if (serviceActive) "ACTIVE" else "STOPPED",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = if (serviceActive) Color.White else TextSecondary,
-                                fontSize = 16.sp
+                                fontSize = 16.sp,
+                                durationMillis = 600
                             )
                         }
                         Spacer(Modifier.width(16.dp))

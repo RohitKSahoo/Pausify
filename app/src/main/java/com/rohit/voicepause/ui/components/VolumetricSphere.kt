@@ -18,6 +18,14 @@ fun VolumetricSphere(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "sphere")
     
+    // Gradual transition for the activity level
+    val targetActivity = if (isActive && isMusicPlaying) 1f else 0f
+    val activityLevel by animateFloatAsState(
+        targetValue = targetActivity,
+        animationSpec = tween(durationMillis = 1500, easing = LinearOutSlowInEasing),
+        label = "activityLevel"
+    )
+
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
@@ -41,10 +49,9 @@ fun VolumetricSphere(
     Canvas(modifier = Modifier.fillMaxSize()) {
         val centerX = size.width / 2f
         val centerY = size.height / 2f
-        // Increased radius from 0.3f to 0.45f
         val baseRadius = min(size.width, size.height) * 0.45f
         
-        val pointCount = 200 // Increased point count for better density at larger size
+        val pointCount = 200
         val phi = PI * (3.0 - sqrt(5.0)) 
 
         for (i in 0 until pointCount) {
@@ -58,11 +65,11 @@ fun VolumetricSphere(
 
             val depthScale = (z + 2f) / 3f
             
-            val reaction = if (isActive && isMusicPlaying) {
-                (sin(theta * 5.0 + rotation * 0.1).toFloat() * 0.25f)
-            } else {
-                (sin(theta * 2.0 + bounce * 5.0).toFloat() * 0.05f)
-            }
+            // Reaction uses the animated activityLevel
+            val activeReaction = (sin(theta * 5.0 + rotation * 0.1).toFloat() * 0.25f)
+            val idleReaction = (sin(theta * 2.0 + bounce * 5.0).toFloat() * 0.05f)
+            
+            val reaction = lerp(idleReaction, activeReaction, activityLevel)
             
             val finalRadius = baseRadius * (1f + reaction)
 
@@ -71,10 +78,14 @@ fun VolumetricSphere(
 
             drawCircle(
                 color = if (i % 3 == 0) PausifyRed else Color.White,
-                radius = 2.5.dp.toPx() * depthScale, // Slightly larger dots
+                radius = 2.5.dp.toPx() * depthScale,
                 center = Offset(drawX, drawY),
                 alpha = (0.3f + (depthScale * 0.7f)).coerceIn(0f, 1f)
             )
         }
     }
+}
+
+private fun lerp(start: Float, stop: Float, fraction: Float): Float {
+    return start + fraction * (stop - start)
 }

@@ -1,11 +1,14 @@
 package com.rohit.voicepause.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,37 +30,50 @@ fun PausifyBottomNav(navController: NavController) {
     val navBackStackEntry = navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry.value?.destination?.route
 
-    NavigationBar(
-        containerColor = BackgroundDark,
-        tonalElevation = 0.dp,
-        modifier = Modifier.height(80.dp)
+    Surface(
+        color = BackgroundDark,
+        tonalElevation = 0.dp
     ) {
-        items.forEach { screen ->
-            val isSelected = currentRoute == screen.route
-            val color = if (isSelected) PausifyRed else TextSecondary
-            
-            NavigationBarItem(
-                selected = isSelected,
-                onClick = {
-                    if (currentRoute != screen.route) {
-                        navController.navigate(screen.route) {
-                            popUpTo(navController.graph.startDestinationId)
-                            launchSingleTop = true
-                        }
-                    }
-                },
-                icon = {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            items.forEach { screen ->
+                val isSelected = currentRoute == screen.route
+                val contentColor = if (isSelected) PausifyRed else TextSecondary
+                
+                Box(
+                    modifier = Modifier
+                        .height(56.dp)
+                        .weight(1f)
+                        .padding(horizontal = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) Color.DarkGray.copy(alpha = 0.3f) else Color.Transparent)
+                        .clickable {
+                            if (currentRoute != screen.route) {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.startDestinationId)
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = screen.icon,
                             contentDescription = screen.title,
-                            tint = color,
+                            tint = contentColor,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = screen.title.uppercase(),
-                            color = color,
+                            color = contentColor,
                             fontSize = 10.sp,
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -70,11 +86,8 @@ fun PausifyBottomNav(navController: NavController) {
                             )
                         }
                     }
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = Color.Transparent
-                )
-            )
+                }
+            }
         }
     }
 }
