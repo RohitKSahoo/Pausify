@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.rohit.voicepause.Settings
 import com.rohit.voicepause.audio.AudioProfile
 import com.rohit.voicepause.ui.components.PausifyHeader
@@ -45,7 +46,7 @@ fun HomeScreen(
     var isMusicPlaying by remember { mutableStateOf(false) }
     var selectedProfile by remember { mutableStateOf(Settings.getSelectedProfile(context)) }
 
-    // Timer state
+    // Timer state - no longer used but kept for LaunchedEffect scope
     var startTime by remember { mutableLongStateOf(0L) }
     var currentTime by remember { mutableLongStateOf(0L) }
 
@@ -73,8 +74,6 @@ fun HomeScreen(
                 delay(1000)
             }
         }
-        // When stopped, we keep startTime and currentTime as they are 
-        // so the exit animation doesn't "blink" back to 00:00:00
     }
 
     val elapsedSeconds = if (startTime > 0) (currentTime - startTime) / 1000 else 0L
@@ -94,14 +93,22 @@ fun HomeScreen(
         ) {
             Spacer(Modifier.height(0.dp))
 
-            // Animated Status Text
-            ScrambledText(
-                text = if (serviceActive) "ACTIVE" else "INACTIVE",
-                style = MaterialTheme.typography.headlineLarge,
-                color = Color.White,
-                fontSize = 48.sp,
-                durationMillis = 600
-            )
+            // Animated Status Text with Red Dot - Reverted styling but kept the dot
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ScrambledText(
+                    text = if (serviceActive) "ACTIVE" else "INACTIVE",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White,
+                    fontSize = 48.sp,
+                    durationMillis = 600
+                )
+                Text(
+                    text = ".",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = PausifyRed,
+                    fontSize = 48.sp
+                )
+            }
 
             Spacer(Modifier.height(10.dp))
 
@@ -190,121 +197,85 @@ fun HomeScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Listening Card / Toggle
+            // Combined container for Listening Card (Timer removed)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp)
-                    .background(
-                        color = if (serviceActive) PausifyRed else CardBackground,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onToggleService
-                    ),
-                contentAlignment = Alignment.Center
+                    .height(110.dp + 4.dp + 46.dp) // Maintain original height to preserve layout spacing
             ) {
-                Row(
+                // Listening Card / Toggle (higher z-index, aligned to top)
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 28.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .height(110.dp)
+                        .align(Alignment.TopCenter)
+                        .zIndex(1f)
+                        .background(
+                            color = if (serviceActive) PausifyRed else CardBackground,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onToggleService
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
-                        Text(
-                            "LISTENING",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (serviceActive) Color.White else TextSecondary,
-                            letterSpacing = 1.sp,
-                            fontSize = 20.sp
-                        )
-                        Text(
-                            "SIGNALS ALERT",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (serviceActive) Color.White.copy(alpha = 0.8f) else TextDisabled,
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(horizontalAlignment = Alignment.End) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 28.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
                             Text(
-                                "STATUS",
+                                "LISTENING",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (serviceActive) Color.White else TextSecondary,
+                                letterSpacing = 1.sp,
+                                fontSize = 20.sp
+                            )
+                            Text(
+                                "SIGNALS ALERT",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (serviceActive) Color.White.copy(alpha = 0.8f) else TextDisabled,
                                 fontSize = 12.sp
                             )
-                            // Animated Status Subtext
-                            ScrambledText(
-                                text = if (serviceActive) "ACTIVE" else "STOPPED",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = if (serviceActive) Color.White else TextSecondary,
-                                fontSize = 16.sp,
-                                durationMillis = 600
-                            )
                         }
-                        Spacer(Modifier.width(16.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(
-                                    if (serviceActive) Color.White.copy(alpha = 0.2f) else BackgroundDark,
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.FiberManualRecord,
-                                contentDescription = null,
-                                tint = if (serviceActive) Color.White else TextDisabled,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            }
 
-            // Fixed height container for Timer and bottom spacing to prevent layout shifts
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp)
-            ) {
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = serviceActive,
-                    enter = expandVertically(animationSpec = tween(600), expandFrom = Alignment.Top) + fadeIn(animationSpec = tween(600)),
-                    exit = shrinkVertically(animationSpec = tween(600), shrinkTowards = Alignment.Top) + fadeOut(animationSpec = tween(600))
-                ) {
-                    Column {
-                        Spacer(Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "SESSION TIME",
-                                color = TextDisabled,
-                                fontSize = 10.sp,
-                                letterSpacing = 1.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.width(12.dp))
-
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    "STATUS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (serviceActive) Color.White.copy(alpha = 0.8f) else TextDisabled,
+                                    fontSize = 12.sp
+                                )
+                                // Animated Status Subtext
+                                ScrambledText(
+                                    text = if (serviceActive) "ACTIVE" else "STOPPED",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = if (serviceActive) Color.White else TextSecondary,
+                                    fontSize = 16.sp,
+                                    durationMillis = 600
+                                )
+                            }
+                            Spacer(Modifier.width(16.dp))
                             Box(
                                 modifier = Modifier
-                                    .border(1.dp, PausifyRed, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                                    .size(40.dp)
+                                    .background(
+                                        if (serviceActive) Color.White.copy(alpha = 0.2f) else BackgroundDark,
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = timerText,
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold
+                                Icon(
+                                    Icons.Default.FiberManualRecord,
+                                    contentDescription = null,
+                                    tint = if (serviceActive) Color.White else TextDisabled,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
