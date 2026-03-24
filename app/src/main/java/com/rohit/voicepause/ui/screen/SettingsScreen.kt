@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,14 +22,14 @@ import com.rohit.voicepause.ui.components.PausifyHeader
 import com.rohit.voicepause.ui.theme.*
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     
     // States linked to Settings
-    var sensitivity by remember { mutableStateOf(Settings.getCustomVoiceSensitivity(context)) }
     var pauseSec by remember { mutableStateOf((Settings.getCustomPauseDurationMs(context) / 1000).toInt()) }
     var backgroundProcessEnabled by remember { mutableStateOf(Settings.isServiceRunning(context)) }
+    var mlEnabled by remember { mutableStateOf(Settings.isMlValidationEnabled(context)) }
 
     Column(
         modifier = Modifier
@@ -36,7 +37,10 @@ fun SettingsScreen() {
             .background(BackgroundDark)
             .verticalScroll(scrollState)
     ) {
-        PausifyHeader()
+        PausifyHeader(
+            navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+            onNavigationClick = onBack
+        )
 
         Column(modifier = Modifier.padding(horizontal = 24.dp)) {
             Text(
@@ -46,7 +50,7 @@ fun SettingsScreen() {
                 fontSize = 40.sp
             )
             Text(
-                "ENGINE CONFIGURATION V2.4",
+                "ENGINE CONFIGURATION V2.5",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextSecondary,
                 letterSpacing = 1.5.sp,
@@ -55,16 +59,15 @@ fun SettingsScreen() {
 
             Spacer(Modifier.height(40.dp))
 
-            // Sensitivity
+            // ML Validation (NEW)
             SettingItem(
-                title = "SENSITIVITY",
-                subtitle = "Sensor response threshold",
-                status = "ACTIVE",
-                hasSlider = true,
-                sliderValue = sensitivity,
-                onSliderChange = {
-                    sensitivity = it
-                    Settings.setCustomVoiceSensitivity(context, it)
+                title = "ML NEURAL FILTER",
+                subtitle = "Validate speech using YAMNet",
+                hasSwitch = true,
+                switchState = mlEnabled,
+                onSwitchChange = {
+                    mlEnabled = it
+                    Settings.setMlValidationEnabled(context, it)
                 }
             )
 
@@ -123,13 +126,17 @@ fun SettingsScreen() {
                 hasChevron = true,
                 onClick = {
                     // Reset all to defaults
-                    sensitivity = 1.0f
                     pauseSec = 3
                     backgroundProcessEnabled = false
+                    mlEnabled = true
                     
                     Settings.setCustomVoiceSensitivity(context, 1.0f)
                     Settings.setCustomPauseSeconds(context, 3)
                     Settings.setServiceRunning(context, false)
+                    Settings.setDuckVolumeEnabled(context, true)
+                    Settings.setAutoResumeEnabled(context, false)
+                    Settings.setEngineMode(context, 1)
+                    Settings.setMlValidationEnabled(context, true)
                 }
             )
 
@@ -141,7 +148,7 @@ fun SettingsScreen() {
             ) {
                 Text("...", color = PausifyRed, fontSize = 32.sp)
                 Text(
-                    "TERMINAL BUILD // 7824",
+                    "TERMINAL BUILD // 7825",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextDisabled,
                     letterSpacing = 2.sp,

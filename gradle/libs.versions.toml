@@ -8,6 +8,12 @@ espressoCore = "3.5.1"
 lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 composeBom = "2024.09.00"
+navigationCompose = "2.8.8"
+tensorflowLiteTaskAudio = "0.4.4"
+tensorflowLiteGpu = "0.4.4"
+tensorflowLiteSupport = "0.5.0"
+composeRuntime = "1.7.3"
+composeIcons = "1.7.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -25,8 +31,15 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 
+# Flatter names to avoid accessor conflicts and reserved words like 'delegate'
+compose-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "composeRuntime" }
+compose-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "composeIcons" }
+navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+tflite-task-audio = { group = "org.tensorflow", name = "tensorflow-lite-task-audio", version.ref = "tensorflowLiteTaskAudio" }
+tflite-gpu-plugin = { group = "org.tensorflow", name = "tensorflow-lite-gpu-delegate-plugin", version.ref = "tensorflowLiteGpu" }
+tflite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tensorflowLiteSupport" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-

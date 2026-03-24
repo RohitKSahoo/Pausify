@@ -18,14 +18,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // NDK (WebRTC VAD)
         ndk {
-            abiFilters += listOf(
-                "arm64-v8a",
-                "armeabi-v7a",
-                "x86",
-                "x86_64"
-            )
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }
 
         externalNativeBuild {
@@ -39,10 +33,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -59,50 +50,50 @@ android {
         compose = true
     }
 
-    composeOptions {
-        // 🔑 CRITICAL: prevents @Composable unresolved issues
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
-
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
     }
+
+    androidResources {
+        noCompress += "tflite"
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    configurations.all {
+        exclude(group = "com.google.ai.edge.litert", module = "litert")
+        exclude(group = "com.google.ai.edge.litert", module = "litert-api")
+        exclude(group = "com.google.ai.edge.litert", module = "litert-support-api")
+    }
 }
 
 dependencies {
-
-    // ===== Core Android =====
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-
-    // ===== Compose =====
     implementation(libs.androidx.activity.compose)
-
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
-
-    // 🔑 REQUIRED for @Composable, remember, mutableStateOf, etc.
-    implementation("androidx.compose.runtime:runtime")
-
-    // ===== Material You (M3) =====
+    implementation(libs.compose.runtime)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.navigation.compose)
+    implementation(libs.compose.icons.extended)
 
-    // ===== Navigation =====
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    // ML / TFLite - Using specific versions to avoid resolution conflicts
+    implementation("org.tensorflow:tensorflow-lite-task-audio:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 
-    // ===== Icons =====
-    implementation("androidx.compose.material:material-icons-extended")
-
-    // ===== Debug / Preview =====
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    // ===== Testing =====
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

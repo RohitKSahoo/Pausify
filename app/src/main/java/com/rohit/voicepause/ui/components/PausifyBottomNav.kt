@@ -14,24 +14,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
-import androidx.navigation.compose.currentBackStackEntryAsState
 import com.rohit.voicepause.ui.screen.Screen
 import com.rohit.voicepause.ui.theme.BackgroundDark
 import com.rohit.voicepause.ui.theme.PausifyRed
 import com.rohit.voicepause.ui.theme.TextSecondary
 
 @Composable
-fun PausifyBottomNav(navController: NavController) {
+fun PausifyBottomNav(
+    currentRoute: String?,
+    onItemSelected: (Screen) -> Unit
+) {
     val items = listOf(
         Screen.Home,
         Screen.Controls,
         Screen.Settings
     )
     
-    val navBackStackEntry = navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry.value?.destination?.route
-
     Surface(
         color = BackgroundDark,
         tonalElevation = 0.dp
@@ -48,7 +46,6 @@ fun PausifyBottomNav(navController: NavController) {
                 val isSelected = currentRoute == screen.route
                 val contentColor = if (isSelected) PausifyRed else TextSecondary
                 
-                // Animate the line width from 0 to 24dp
                 val lineWidth by animateDpAsState(
                     targetValue = if (isSelected) 24.dp else 0.dp,
                     animationSpec = spring(
@@ -64,14 +61,9 @@ fun PausifyBottomNav(navController: NavController) {
                         .weight(1f)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null // Removes the default ripple highlight
+                            indication = null
                         ) {
-                            if (currentRoute != screen.route) {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.startDestinationId)
-                                    launchSingleTop = true
-                                }
-                            }
+                            onItemSelected(screen)
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -88,7 +80,6 @@ fun PausifyBottomNav(navController: NavController) {
                         
                         Spacer(Modifier.height(6.dp))
                         
-                        // Animated red line
                         Box(
                             modifier = Modifier
                                 .height(2.dp)

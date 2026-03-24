@@ -27,7 +27,7 @@ extern "C" {
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeCreateVad(JNIEnv *env, jobject thiz) {
+Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeCreateVad(JNIEnv * /* env */, jobject /* thiz */) {
     VadInst* vad_handle = WebRtcVad_Create();
     if (vad_handle == nullptr) {
         LOGE("Failed to create WebRTC VAD instance");
@@ -39,7 +39,7 @@ Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeCreateVad(JNIEnv *env, jo
 }
 
 JNIEXPORT jint JNICALL
-Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeInitVad(JNIEnv *env, jobject thiz, 
+Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeInitVad(JNIEnv * /* env */, jobject /* thiz */, 
                                                                jlong vad_handle, jint sample_rate) {
     if (vad_handle == 0) {
         LOGE("Invalid VAD handle");
@@ -60,7 +60,7 @@ Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeInitVad(JNIEnv *env, jobj
 }
 
 JNIEXPORT jint JNICALL
-Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeSetAggressiveness(JNIEnv *env, jobject thiz,
+Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeSetAggressiveness(JNIEnv * /* env */, jobject /* thiz */,
                                                                          jlong vad_handle, jint aggressiveness) {
     if (vad_handle == 0) {
         LOGE("Invalid VAD handle");
@@ -85,7 +85,7 @@ Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeSetAggressiveness(JNIEnv 
 }
 
 JNIEXPORT jint JNICALL
-Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeProcessFrame(JNIEnv *env, jobject thiz,
+Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeProcessFrame(JNIEnv *env, jobject /* thiz */,
                                                                     jlong vad_handle, jshortArray audio_frame, jint frame_size) {
     if (vad_handle == 0) {
         LOGE("Invalid VAD handle");
@@ -138,7 +138,7 @@ Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeProcessFrame(JNIEnv *env,
 }
 
 JNIEXPORT jint JNICALL
-Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeDestroyVad(JNIEnv *env, jobject thiz, 
+Java_com_rohit_voicepause_audio_WebRtcVadWrapper_nativeDestroyVad(JNIEnv * /* env */, jobject /* thiz */, 
                                                                   jlong vad_handle) {
     if (vad_handle == 0) {
         LOGD("VAD handle already null, nothing to destroy");
@@ -187,7 +187,7 @@ int WebRtcVad_set_mode(VadInst* handle, int mode) {
     return 0;
 }
 
-int WebRtcVad_Process(VadInst* handle, int fs, const int16_t* audio_frame, size_t frame_length) {
+int WebRtcVad_Process(VadInst* handle, int /* fs */, const int16_t* audio_frame, size_t frame_length) {
     if (handle == nullptr || !handle->initialized || audio_frame == nullptr) {
         return -1;
     }

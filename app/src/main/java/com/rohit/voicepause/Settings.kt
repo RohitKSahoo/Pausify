@@ -13,6 +13,13 @@ object Settings {
     // ===== KEYS =====
     private const val KEY_SERVICE_RUNNING = "service_running"
     private const val KEY_SELECTED_PROFILE = "selected_audio_profile"
+    private const val KEY_DUCK_VOLUME = "duck_volume_enabled"
+    private const val KEY_AUTO_RESUME = "auto_resume_enabled"
+    private const val KEY_ENGINE_MODE = "engine_mode"
+    
+    // ML Specific
+    private const val KEY_ML_VALIDATION_ENABLED = "ml_validation_enabled"
+    private const val KEY_ML_CONFIDENCE_THRESHOLD = "ml_confidence_threshold"
 
     // ===== CUSTOM PROFILE KEYS =====
     private const val KEY_CUSTOM_PAUSE_SEC = "custom_pause_sec"
@@ -27,6 +34,12 @@ object Settings {
     private const val DEFAULT_CUSTOM_MIN_SPEECH = 250L
     private const val DEFAULT_CUSTOM_MIN_ENERGY = 400
     private const val DEFAULT_CUSTOM_VAD_MODE = 2
+    private const val DEFAULT_DUCK_VOLUME = true
+    private const val DEFAULT_AUTO_RESUME = false
+    private const val DEFAULT_ENGINE_MODE = 1
+    
+    private const val DEFAULT_ML_VALIDATION_ENABLED = true
+    private const val DEFAULT_ML_CONFIDENCE_THRESHOLD = 0.35f
 
     // ===== PREF ACCESS =====
     private fun prefs(context: Context): SharedPreferences =
@@ -71,6 +84,49 @@ object Settings {
             .apply()
 
         Log.i(TAG, "[SERVICE] running=$running")
+    }
+
+    // ======================
+    // ENGINE SETTINGS (DUCK, RESUME, MODE)
+    // ======================
+
+    fun isDuckVolumeEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DUCK_VOLUME, DEFAULT_DUCK_VOLUME)
+
+    fun setDuckVolumeEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DUCK_VOLUME, enabled).apply()
+    }
+
+    fun isAutoResumeEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_AUTO_RESUME, DEFAULT_AUTO_RESUME)
+
+    fun setAutoResumeEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_AUTO_RESUME, enabled).apply()
+    }
+
+    fun getEngineMode(context: Context): Int =
+        prefs(context).getInt(KEY_ENGINE_MODE, DEFAULT_ENGINE_MODE)
+
+    fun setEngineMode(context: Context, mode: Int) {
+        prefs(context).edit().putInt(KEY_ENGINE_MODE, mode).apply()
+    }
+
+    // ======================
+    // ML SETTINGS
+    // ======================
+
+    fun isMlValidationEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ML_VALIDATION_ENABLED, DEFAULT_ML_VALIDATION_ENABLED)
+
+    fun setMlValidationEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ML_VALIDATION_ENABLED, enabled).apply()
+    }
+
+    fun getMlConfidenceThreshold(context: Context): Float =
+        prefs(context).getFloat(KEY_ML_CONFIDENCE_THRESHOLD, DEFAULT_ML_CONFIDENCE_THRESHOLD)
+
+    fun setMlConfidenceThreshold(context: Context, threshold: Float) {
+        prefs(context).edit().putFloat(KEY_ML_CONFIDENCE_THRESHOLD, threshold).apply()
     }
 
     // ======================

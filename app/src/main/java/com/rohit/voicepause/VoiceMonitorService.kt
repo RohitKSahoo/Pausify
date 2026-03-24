@@ -163,7 +163,7 @@ class VoiceMonitorService : Service(), VadProcessor.VadProcessorListener {
 
     private fun initializeVad() {
 
-        if (!vadProcessor.initialize(this, currentProfile)) {
+        if (!vadProcessor.initialize(applicationContext, this, currentProfile)) {
             stopServiceCompletely("VAD init failed")
             return
         }

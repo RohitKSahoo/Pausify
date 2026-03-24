@@ -27,9 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.rohit.voicepause.Settings
 import com.rohit.voicepause.audio.AudioProfile
-import com.rohit.voicepause.ui.components.PausifyHeader
-import com.rohit.voicepause.ui.components.ScrambledText
-import com.rohit.voicepause.ui.components.VolumetricSphere
+import com.rohit.voicepause.ui.components.*
 import com.rohit.voicepause.ui.theme.*
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -115,7 +113,7 @@ fun HomeScreen(
             // Fixed height for status message to prevent visualizer/card shift
             Box(modifier = Modifier.height(56.dp)) {
                 Text(
-                    text = if (serviceActive) "Monitoring." 
+                    text = if (serviceActive) "Engaged."
                            else "Engine standby.\nTap to engage.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
@@ -195,7 +193,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(20.dp)) //Dont touch this line at all
 
             // Combined container for Listening Card (Timer removed)
             Box(
@@ -203,6 +201,8 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .height(110.dp + 4.dp + 46.dp) // Maintain original height to preserve layout spacing
             ) {
+                val interactionSource = remember { MutableInteractionSource() }
+                
                 // Listening Card / Toggle (higher z-index, aligned to top)
                 Box(
                     modifier = Modifier
@@ -210,13 +210,16 @@ fun HomeScreen(
                         .height(110.dp)
                         .align(Alignment.TopCenter)
                         .zIndex(1f)
-                        .background(
-                            color = if (serviceActive) PausifyRed else CardBackground,
+                        .gradientRippleBackground(
+                            targetState = serviceActive,
+                            activeColor = PausifyRed,
+                            inactiveColor = CardBackground,
+                            interactionSource = interactionSource,
                             shape = RoundedCornerShape(8.dp)
                         )
                         .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
+                            interactionSource = interactionSource,
+                            indication = null, // Disable default indication to use our custom gradient ripple
                             onClick = onToggleService
                         ),
                     contentAlignment = Alignment.Center
