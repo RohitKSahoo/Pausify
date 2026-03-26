@@ -22,7 +22,10 @@ import com.rohit.voicepause.ui.components.PausifyHeader
 import com.rohit.voicepause.ui.theme.*
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onNavigateToEnrollment: () -> Unit
+) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     
@@ -30,6 +33,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var pauseSec by remember { mutableStateOf((Settings.getCustomPauseDurationMs(context) / 1000).toInt()) }
     var backgroundProcessEnabled by remember { mutableStateOf(Settings.isServiceRunning(context)) }
     var mlEnabled by remember { mutableStateOf(Settings.isMlValidationEnabled(context)) }
+    var speakerEnabled by remember { mutableStateOf(Settings.isSpeakerVerificationEnabled(context)) }
+    val hasEmbedding = remember { Settings.getUserEmbedding(context) != null }
 
     Column(
         modifier = Modifier
@@ -50,7 +55,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 fontSize = 40.sp
             )
             Text(
-                "ENGINE CONFIGURATION V2.5",
+                "ENGINE CONFIGURATION V2.6",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextSecondary,
                 letterSpacing = 1.5.sp,
@@ -59,7 +64,32 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(40.dp))
 
-            // ML Validation (NEW)
+            // Speaker Verification (NEW)
+            SettingItem(
+                title = "SPEAKER VERIFICATION",
+                subtitle = if (hasEmbedding) "Only pause for your voice" else "Setup required: Record voice profile",
+                hasSwitch = hasEmbedding,
+                switchState = speakerEnabled,
+                onSwitchChange = {
+                    speakerEnabled = it
+                    Settings.setSpeakerVerificationEnabled(context, it)
+                },
+                status = if (!hasEmbedding) "INACTIVE" else null,
+                onClick = if (!hasEmbedding) onNavigateToEnrollment else null
+            )
+
+            if (hasEmbedding) {
+                SettingItem(
+                    title = "RE-RECORD PROFILE",
+                    subtitle = "Update your voice signature",
+                    hasChevron = true,
+                    onClick = onNavigateToEnrollment
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // ML Validation
             SettingItem(
                 title = "ML NEURAL FILTER",
                 subtitle = "Validate speech using YAMNet",
@@ -107,18 +137,6 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(32.dp))
 
-            // Encryption & Privacy
-            SettingItem(
-                title = "ENCRYPTION & PRIVACY",
-                subtitle = "Data handling protocol",
-                hasChevron = true,
-                onClick = {
-                    // Placeholder for privacy screen
-                }
-            )
-
-            Spacer(Modifier.height(32.dp))
-
             // Factory Reset
             SettingItem(
                 title = "FACTORY RESET",
@@ -129,6 +147,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     pauseSec = 3
                     backgroundProcessEnabled = false
                     mlEnabled = true
+                    speakerEnabled = false
                     
                     Settings.setCustomVoiceSensitivity(context, 1.0f)
                     Settings.setCustomPauseSeconds(context, 3)
@@ -137,6 +156,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Settings.setAutoResumeEnabled(context, false)
                     Settings.setEngineMode(context, 1)
                     Settings.setMlValidationEnabled(context, true)
+                    Settings.setSpeakerVerificationEnabled(context, false)
+                    Settings.clearUserEmbedding(context)
                 }
             )
 
@@ -148,7 +169,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             ) {
                 Text("...", color = PausifyRed, fontSize = 32.sp)
                 Text(
-                    "TERMINAL BUILD // 7825",
+                    "TERMINAL BUILD // 8104",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextDisabled,
                     letterSpacing = 2.sp,

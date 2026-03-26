@@ -59,6 +59,7 @@ android {
 
     androidResources {
         noCompress += "tflite"
+        noCompress += "onnx"
     }
 
     packaging {
@@ -87,10 +88,13 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.compose.icons.extended)
 
-    // ML / TFLite - Using specific versions to avoid resolution conflicts
+    // ML / TFLite
     implementation("org.tensorflow:tensorflow-lite-task-audio:0.4.4")
     implementation("org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.4")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+
+    // ONNX Runtime for Speaker Verification
+    implementation(libs.onnxruntime.android)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

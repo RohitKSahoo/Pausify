@@ -28,6 +28,7 @@ class VadProcessor :
     private val audioCapture = AudioCapture()
     private lateinit var speechStateMachine: SpeechStateMachine
     private var speechClassifier: SpeechClassifier? = null
+    private var speakerVerifier: SpeakerVerifier? = null
 
     // ===== ACTIVE PARAMETERS =====
     private var minSpeechMs = 400L
@@ -78,7 +79,7 @@ class VadProcessor :
             return false
         }
         
-        // Initialize ML Classifier
+        // Initialize ML Classifier (Plan 1)
         if (Settings.isMlValidationEnabled(context)) {
             speechClassifier = SpeechClassifier(context)
             if (!speechClassifier!!.initialize()) {
@@ -86,10 +87,16 @@ class VadProcessor :
             }
         }
 
+        // Initialize Speaker Verifier (Plan 2)
+        speakerVerifier = SpeakerVerifier(context)
+        if (!speakerVerifier!!.initialize()) {
+            Log.w(TAG, "Speaker Verifier failed to initialize, Plan 2 disabled")
+        }
+
         Log.i(
             TAG,
             "Initialized: Profile=${profile.displayName} " +
-                    "speech=$minSpeechMs energy=$minVoiceEnergy vad=$vadAggressiveness ML=${speechClassifier != null}"
+                    "speech=$minSpeechMs energy=$minVoiceEnergy vad=$vadAggressiveness ML=${speechClassifier != null} SPK=${speakerVerifier != null}"
         )
 
         return true
@@ -158,6 +165,8 @@ class VadProcessor :
         vadWrapper.destroy()
         speechClassifier?.release()
         speechClassifier = null
+        speakerVerifier?.release()
+        speakerVerifier = null
         listener = null
         context = null
     }
@@ -244,6 +253,7 @@ class VadProcessor :
     
     private fun validateAndNotify() {
         val classifier = speechClassifier
+        val verifier = speakerVerifier
         val ctx = context
         
         if (classifier != null && ctx != null && Settings.isMlValidationEnabled(ctx)) {
@@ -251,8 +261,21 @@ class VadProcessor :
             val isConfirmed = classifier.confirmSpeech(audioData)
             
             if (isConfirmed) {
-                lastMlInferenceTime = System.currentTimeMillis()
-                listener?.onSpeechDetected(lastRms, lastIsNear)
+                // Speech confirmed by ML, now run Speaker Verification (Plan 2)
+                if (verifier != null && Settings.isSpeakerVerificationEnabled(ctx)) {
+                    verifier.verify(audioData) { isUser ->
+                        if (isUser) {
+                            lastMlInferenceTime = System.currentTimeMillis()
+                            listener?.onSpeechDetected(lastRms, lastIsNear)
+                        } else {
+                            Log.d(TAG, "[SPK] Rejected Speech (Not the registered user)")
+                        }
+                    }
+                } else {
+                    // Plan 2 disabled or failed to init, fallback to Plan 1 (confirmed ML)
+                    lastMlInferenceTime = System.currentTimeMillis()
+                    listener?.onSpeechDetected(lastRms, lastIsNear)
+                }
             } else {
                 Log.d(TAG, "[ML] Rejected VAD trigger (False Positive)")
             }

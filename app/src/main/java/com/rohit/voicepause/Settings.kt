@@ -21,6 +21,11 @@ object Settings {
     private const val KEY_ML_VALIDATION_ENABLED = "ml_validation_enabled"
     private const val KEY_ML_CONFIDENCE_THRESHOLD = "ml_confidence_threshold"
 
+    // Speaker Verification Specific
+    private const val KEY_SPEAKER_VERIFICATION_ENABLED = "speaker_verification_enabled"
+    private const val KEY_USER_EMBEDDING = "user_embedding"
+    private const val KEY_SPEAKER_THRESHOLD = "speaker_similarity_threshold"
+
     // ===== CUSTOM PROFILE KEYS =====
     private const val KEY_CUSTOM_PAUSE_SEC = "custom_pause_sec"
     private const val KEY_CUSTOM_SENSITIVITY = "custom_voice_sensitivity"
@@ -40,6 +45,9 @@ object Settings {
     
     private const val DEFAULT_ML_VALIDATION_ENABLED = true
     private const val DEFAULT_ML_CONFIDENCE_THRESHOLD = 0.35f
+
+    private const val DEFAULT_SPEAKER_VERIFICATION_ENABLED = false
+    private const val DEFAULT_SPEAKER_THRESHOLD = 0.75f
 
     // ===== PREF ACCESS =====
     private fun prefs(context: Context): SharedPreferences =
@@ -127,6 +135,42 @@ object Settings {
 
     fun setMlConfidenceThreshold(context: Context, threshold: Float) {
         prefs(context).edit().putFloat(KEY_ML_CONFIDENCE_THRESHOLD, threshold).apply()
+    }
+
+    // ======================
+    // SPEAKER VERIFICATION SETTINGS
+    // ======================
+
+    fun isSpeakerVerificationEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SPEAKER_VERIFICATION_ENABLED, DEFAULT_SPEAKER_VERIFICATION_ENABLED)
+
+    fun setSpeakerVerificationEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SPEAKER_VERIFICATION_ENABLED, enabled).apply()
+    }
+
+    fun getSpeakerThreshold(context: Context): Float =
+        prefs(context).getFloat(KEY_SPEAKER_THRESHOLD, DEFAULT_SPEAKER_THRESHOLD)
+
+    fun setSpeakerThreshold(context: Context, threshold: Float) {
+        prefs(context).edit().putFloat(KEY_SPEAKER_THRESHOLD, threshold).apply()
+    }
+
+    fun getUserEmbedding(context: Context): FloatArray? {
+        val encoded = prefs(context).getString(KEY_USER_EMBEDDING, null) ?: return null
+        return try {
+            encoded.split(",").map { it.toFloat() }.toFloatArray()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun setUserEmbedding(context: Context, embedding: FloatArray) {
+        val encoded = embedding.joinToString(",")
+        prefs(context).edit().putString(KEY_USER_EMBEDDING, encoded).apply()
+    }
+
+    fun clearUserEmbedding(context: Context) {
+        prefs(context).edit().remove(KEY_USER_EMBEDDING).apply()
     }
 
     // ======================

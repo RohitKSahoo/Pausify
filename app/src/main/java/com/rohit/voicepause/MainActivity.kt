@@ -1,10 +1,8 @@
 package com.rohit.voicepause
 
 import android.Manifest
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -24,9 +22,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.rohit.voicepause.audio.SpeakerVerifier
 import com.rohit.voicepause.ui.components.PausifyBottomNav
 import com.rohit.voicepause.ui.screen.*
 import com.rohit.voicepause.ui.theme.VoicePauseTheme
@@ -34,10 +32,16 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var speakerVerifier: SpeakerVerifier
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         Settings.migrate(this)
+        
+        // Initialize SpeakerVerifier for UI (Enrollment)
+        speakerVerifier = SpeakerVerifier(this)
+        speakerVerifier.initialize()
 
         setContent {
             VoicePauseTheme {
@@ -45,8 +49,9 @@ class MainActivity : ComponentActivity() {
                 val isRunning by VoiceMonitorService.isRunningFlow.collectAsState()
                 val scope = rememberCoroutineScope()
 
-                // State to track if the Live Monitor (ActivityScreen) is explicitly opened
+                // Navigation states
                 var showLiveMonitor by remember { mutableStateOf(false) }
+                var showEnrollment by remember { mutableStateOf(false) }
 
                 // The pages in our horizontal pager
                 val pages = listOf(Screen.Home, Screen.Controls, Screen.Settings)
@@ -56,15 +61,16 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
-                // Handle system back button when Live Monitor is open
-                BackHandler(enabled = showLiveMonitor) {
-                    showLiveMonitor = false
+                // Handle system back button
+                BackHandler(enabled = showLiveMonitor || showEnrollment) {
+                    if (showEnrollment) showEnrollment = false
+                    else showLiveMonitor = false
                 }
 
                 Scaffold(
                     bottomBar = {
-                        // Only show bottom nav if Live Monitor is NOT open
-                        if (!showLiveMonitor) {
+                        // Only show bottom nav if no overlays are open
+                        if (!showLiveMonitor && !showEnrollment) {
                             PausifyBottomNav(
                                 currentRoute = pages[pagerState.currentPage].route,
                                 onItemSelected = { screen ->
@@ -79,17 +85,22 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { innerPadding ->
-                    Box(modifier = Modifier.fillMaxSize().padding(if (showLiveMonitor) PaddingValues(0.dp) else innerPadding)) {
+                    val bottomPadding = if (showLiveMonitor || showEnrollment) 0.dp else innerPadding.calculateBottomPadding()
+                    val topPadding = if (showLiveMonitor || showEnrollment) 0.dp else innerPadding.calculateTopPadding()
+                    
+                    Box(modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = topPadding, bottom = bottomPadding)) {
+                        
                         // Main content pager
                         HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.fillMaxSize(),
                             beyondViewportPageCount = 1,
-                            userScrollEnabled = !showLiveMonitor // Disable swiping when monitor is open
+                            userScrollEnabled = !showLiveMonitor && !showEnrollment
                         ) { pageIndex ->
                             when (pages[pageIndex]) {
                                 Screen.Home -> {
-                                    // Slot 0 is always HomeScreen now
                                     HomeScreen(
                                         isRunning = isRunning,
                                         onToggleService = {
@@ -106,25 +117,24 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 Screen.Settings -> {
-                                    SettingsScreen(onBack = {
-                                        scope.launch { pagerState.animateScrollToPage(0) }
-                                    })
+                                    SettingsScreen(
+                                        onBack = {
+                                            scope.launch { pagerState.animateScrollToPage(0) }
+                                        },
+                                        onNavigateToEnrollment = {
+                                            showEnrollment = true
+                                        }
+                                    )
                                 }
                                 else -> Unit
                             }
                         }
 
-                        // Overlay for Activity Screen (Live Monitor) with slide up/down animation
+                        // Overlay for Activity Screen
                         AnimatedVisibility(
                             visible = showLiveMonitor,
-                            enter = slideInVertically(
-                                initialOffsetY = { it },
-                                animationSpec = tween(durationMillis = 500)
-                            ) + fadeIn(),
-                            exit = slideOutVertically(
-                                targetOffsetY = { it },
-                                animationSpec = tween(durationMillis = 500)
-                            ) + fadeOut()
+                            enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(500)) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(500)) + fadeOut()
                         ) {
                             ActivityScreen(
                                 onEndSession = { 
@@ -133,10 +143,27 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+
+                        // Overlay for Voice Enrollment Screen (NEW)
+                        AnimatedVisibility(
+                            visible = showEnrollment,
+                            enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(400)) + fadeIn(),
+                            exit = slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(400)) + fadeOut()
+                        ) {
+                            VoiceEnrollmentScreen(
+                                speakerVerifier = speakerVerifier,
+                                onBack = { showEnrollment = false }
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        speakerVerifier.release()
     }
 
     // ======================
