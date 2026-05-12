@@ -16,6 +16,14 @@ Built for Android, Pausify addresses the friction of manual media control in han
 
 ---
 
+## 📱 Screenshots
+
+| Screenshot 1 | Screenshot 2 | Screenshot 3 |
+| :---: | :---: | :---: |
+| ![Screenshot 1](assets/screenshot1.png) | ![Screenshot 2](assets/screenshot2.png) | ![Screenshot 3](assets/screenshot3.png) |
+
+---
+
 ## ⚙️ How It Works
 
 Pausify uses a multi-stage pipeline to balance low latency with high precision:
