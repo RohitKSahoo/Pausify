@@ -1,54 +1,108 @@
-# Pausify
+# ⏸️ Pausify (v1.0.0)
 
-## Overview
-Pausify is a productivity tool designed to help users manage their work and relaxation time effectively. Its primary goal is to enhance focus and minimize distractions by providing structured pauses.
+Pausify is an Android app that automatically pauses your media when you speak and resumes it when you stop.
 
-## Features
-- **Pomodoro Timer**: Implement the Pomodoro technique for focused work sessions.
-- **Customizable Breaks**: Set and adjust break durations and frequencies.
-- **Analytics**: Track productivity levels over time.
+It creates a seamless, hands-free experience by:
+- Detecting when you start speaking
+- Automatically pausing active media (Spotify, YouTube, etc.)
+- Resuming playback once you are done talking
 
-## Installation
-To install Pausify, follow these steps:
+All processing happens entirely on-device for maximum privacy and low latency.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/RohitKSahoo/Pausify.git
-   ```
-2. Change directory into the project:
-   ```bash
-   cd Pausify
-   ```
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
+### 🎧 **For when you are vibing to your music, but life demands a quick conversation.**
 
-## Usage
-To start using Pausify:
-1. Run the application:
-   ```bash
-   npm start
-   ```
-2. Follow the on-screen instructions to set your work and break intervals.
+---
 
-## Contributing
-Contributions to Pausify are welcome! Please ensure your code follows the project's coding standards and add any necessary documentation.
+## 📱 Screenshots
 
-1. Fork the repository.
-2. Create a new branch for your feature:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. Commit your changes.
-4. Push to your branch:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-5. Create a pull request.
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="assets/Dashboard.png" width="250"/><br/>
+      <b>Control Dashboard</b>
+    </td>
+    <td width="20"></td>
+    <td align="center">
+      <img src="assets/Settings.png" width="250"/><br/>
+      <b>Settings</b>
+    </td>
+  </tr>
+</table>
 
-## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+---
 
-## Acknowledgments
-Special thanks to all contributors and users who provide feedback and help improve Pausify!
+## ⭐ Features
+
+- 🎙️ **Real-Time Speech Detection**  
+  Detects speech onset within 100–200ms using a low-latency VAD layer.
+
+- 🧠 **ML-Based Validation**  
+  Uses YAMNet (TensorFlow Lite) to distinguish speech from noise, reducing false triggers to <3%.
+
+- ⏯️ **Intelligent Playback Control**  
+  Smoothly pauses and resumes media without rapid toggling.
+
+- 📱 **Foreground Service**  
+  Operates reliably in the background with a persistent notification.
+
+- 🔒 **Privacy Friendly**  
+  All audio processing and inference happen locally on your device.
+
+- 📊 **Status Dashboard**  
+  Shows the current system state (Active / Inactive).
+
+---
+
+## 🛠️ Tech Stack
+
+- Kotlin
+- Jetpack Compose
+- TensorFlow Lite
+- WebRTC VAD (C++/JNI)
+- Coroutines & Flow
+
+### APIs Used
+- Android AudioRecord API
+- Android AudioManager API
+
+---
+
+## 🏗️ Architecture
+
+- Pipeline-based processing (Audio → VAD → ML → Action)
+- Foreground Service for continuous monitoring
+
+---
+
+## 🚀 Getting Started
+
+### Requirements
+
+- Android 10.0 (API 29) or higher
+- Microphone permission
+- Notification permission
+
+---
+
+### Installation
+
+👉 [Download APK](https://github.com/RohitKSahoo/Pausify/releases)
+
+---
+
+## 👤 Author
+
+Rohit K Sahoo  
+GitHub: https://github.com/RohitKSahoo
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 🧾 Summary
+
+Pausify helps you automatically control media playback based on your voice, eliminating the need to manually pause when speaking.
