@@ -20,7 +20,7 @@ Built for Android, Pausify addresses the friction of manual media control in han
 
 | Screenshot 1 | Screenshot 2 | Screenshot 3 |
 | :---: | :---: | :---: |
-| ![Screenshot 1](assets/screenshot1.png) | ![Screenshot 2](assets/screenshot2.png) | ![Screenshot 3](assets/screenshot3.png) |
+| ![Screenshot 1](assets/Pausify1.png) | ![Screenshot 2](assets/Pausify2.png) | ![Screenshot 3](assets/Pausify3.png) |
 
 ---
 
